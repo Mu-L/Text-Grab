@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,6 +9,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Text_Grab.Properties;
 using Text_Grab.Utilities;
+using Accessibility;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace Text_Grab.Views;
 
@@ -43,6 +46,21 @@ public partial class FullscreenGrab : Window
     public FullscreenGrab()
     {
         InitializeComponent();
+    }
+
+    [DllImport("oleacc.dll")]
+    private static extern IntPtr AccessibleObjectFromPoint(POINT pt, [Out, MarshalAs(UnmanagedType.Interface)] out IAccessible accObj, [Out] out object ChildID);
+
+    /// <summary>
+    /// Gets an accessibility object for given screen coordinates.
+    /// </summary>
+    public static SystemAccessibleObject FromPoint(int x, int y)
+    {
+        IAccessible iacc;
+        object ci;
+        IntPtr result = AccessibleObjectFromPoint(new POINT(x, y), out iacc, out ci);
+        if (result != IntPtr.Zero) throw new Exception("AccessibleObjectFromPoint returned " + result.ToInt32());
+        return new SystemAccessibleObject(iacc, (int)(ci ?? 0));
     }
 
     public void SetImageToBackground()
@@ -303,7 +321,14 @@ public partial class FullscreenGrab : Window
         if (regionScaled.Width < 3 || regionScaled.Height < 3)
         {
             BackgroundBrush.Opacity = 0;
-            grabbedText = await ImageMethods.GetClickedWord(this, new System.Windows.Point(xDimScaled, yDimScaled));
+            // grabbedText = await ImageMethods.GetClickedWord(this, new System.Windows.Point(xDimScaled, yDimScaled));
+            this.Visibility = Visibility.Collapsed;
+            await Task.Delay(100);
+            SystemAccessibleObject sao = FromPoint((int)xDimScaled, (int)yDimScaled);
+            if (sao is not null && string.IsNullOrEmpty(sao.Value) == false)
+            {
+                grabbedText = sao.Value;
+            }
         }
         else
             grabbedText = await ImageMethods.GetRegionsText(this, regionScaled);

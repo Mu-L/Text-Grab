@@ -321,13 +321,31 @@ public partial class FullscreenGrab : Window
         if (regionScaled.Width < 3 || regionScaled.Height < 3)
         {
             BackgroundBrush.Opacity = 0;
-            // grabbedText = await ImageMethods.GetClickedWord(this, new System.Windows.Point(xDimScaled, yDimScaled));
             this.Visibility = Visibility.Collapsed;
             await Task.Delay(100);
             SystemAccessibleObject sao = FromPoint((int)xDimScaled, (int)yDimScaled);
-            if (sao is not null && string.IsNullOrEmpty(sao.Value) == false)
+            if (sao is not null)
             {
-                grabbedText = sao.Value;
+                if ((AccRoles)sao.Role == AccRoles.ROLE_SYSTEM_TITLEBAR)
+                    grabbedText = sao.Value;
+                else
+                {
+                    SystemAccessibleObject? textSAO = FindTextAccObj(sao);
+
+                    if (textSAO is not null)
+                    {
+                        if (string.IsNullOrEmpty(textSAO.Value))
+                            grabbedText = textSAO.Name;
+                        else
+                            grabbedText = textSAO.Value;
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(grabbedText))
+            {
+                this.Visibility = Visibility.Visible;
+                grabbedText = await ImageMethods.GetClickedWord(this, new System.Windows.Point(xDimScaled, yDimScaled));
             }
         }
         else
@@ -363,6 +381,23 @@ public partial class FullscreenGrab : Window
             new System.Windows.Point(0, 0),
             new System.Windows.Size(0, 0));
         }
+    }
+
+    private SystemAccessibleObject? FindTextAccObj(SystemAccessibleObject saoToCheck)
+    {
+        if ((AccRoles)saoToCheck.Role == AccRoles.ROLE_SYSTEM_TEXT || (AccRoles)saoToCheck.Role == AccRoles.ROLE_SYSTEM_STATICTEXT)
+            return saoToCheck;
+
+        if (saoToCheck.ChildCount > 0)
+        {
+            foreach (SystemAccessibleObject childSAO in saoToCheck.Children)
+            {
+                if (childSAO is not null && ((AccRoles)childSAO.Role == AccRoles.ROLE_SYSTEM_TEXT || (AccRoles)childSAO.Role == AccRoles.ROLE_SYSTEM_STATICTEXT))
+                    return childSAO;
+            }
+        }
+
+        return null;
     }
 
     private void SingleLineMenuItem_Click(object sender, RoutedEventArgs e)

@@ -23,6 +23,9 @@ public static class SettingsImportExportUtilities
     private const string HistoryTextOnlyFileName = "HistoryTextOnly.json";
     private const string HistoryWithImageFileName = "HistoryWithImage.json";
     private const string HistoryFolderName = "history";
+    private const string GrabTemplatesFileName = "GrabTemplates.json";
+    private const string TemplateImagesFolderName = "template-images";
+    private const string ManagedSettingsFolderName = "settings-data";
 
     /// <summary>
     /// Exports all application settings and optionally history to a ZIP file.
@@ -36,12 +39,20 @@ public static class SettingsImportExportUtilities
 
         try
         {
-            // Export settings to JSON
+            // Export settings to JSON and sidecar files
             await ExportSettingsToJsonAsync(Path.Combine(tempDir, SettingsFileName));
+            ExportManagedJsonSettingsFolder(tempDir);
+            await ExportGrabTemplatesAsync(tempDir);
 
             // Export history if requested
             if (includeHistory)
             {
+                // Flush any pending in-memory history changes to disk before
+                // reading the files. The lazy-loading HistoryService may have
+                // normalized IDs, migrated word-border data, or accepted new
+                // entries that haven't been written yet.
+                Singleton<HistoryService>.Instance.WriteHistory();
+
                 await ExportHistoryAsync(tempDir);
             }
 
@@ -85,6 +96,9 @@ public static class SettingsImportExportUtilities
             {
                 await ImportSettingsFromJsonAsync(settingsPath);
             }
+
+            ImportManagedJsonSettingsFolder(tempDir);
+            await ImportGrabTemplatesAsync(tempDir);
 
             // Import history if present
             string historyTextOnlyPath = Path.Combine(tempDir, HistoryTextOnlyFileName);
@@ -189,6 +203,92 @@ public static class SettingsImportExportUtilities
         }
 
         settings.Save();
+    }
+
+    private static async Task ExportGrabTemplatesAsync(string tempDir)
+    {
+        string templatesJson = GrabTemplateManager.GetTemplatesJsonForExport();
+        await File.WriteAllTextAsync(Path.Combine(tempDir, GrabTemplatesFileName), templatesJson);
+
+        string sourceImagesDir = GrabTemplateManager.GetTemplateImagesFolder();
+        if (!Directory.Exists(sourceImagesDir))
+            return;
+
+        string destinationImagesDir = Path.Combine(tempDir, TemplateImagesFolderName);
+        Directory.CreateDirectory(destinationImagesDir);
+
+        foreach (string imagePath in Directory.GetFiles(sourceImagesDir))
+        {
+            string destinationPath = Path.Combine(destinationImagesDir, Path.GetFileName(imagePath));
+            File.Copy(imagePath, destinationPath, true);
+        }
+    }
+
+    private static async Task ImportGrabTemplatesAsync(string tempDir)
+    {
+        string templatesPath = Path.Combine(tempDir, GrabTemplatesFileName);
+        string sourceImagesDir = Path.Combine(tempDir, TemplateImagesFolderName);
+
+        if (File.Exists(templatesPath))
+        {
+            string templatesJson = await File.ReadAllTextAsync(templatesPath);
+            GrabTemplateManager.ImportTemplatesFromJson(templatesJson);
+        }
+        else if (GrabTemplateManager.GetAllTemplates() is { Count: > 0 })
+        {
+            // No templates in the ZIP — trigger a read so the dual-store sync
+            // reconciles the legacy setting and sidecar file for any existing
+            // templates that were already on this machine.
+            GrabTemplateManager.SaveTemplates(GrabTemplateManager.GetAllTemplates());
+        }
+
+        if (!Directory.Exists(sourceImagesDir))
+            return;
+
+        string destinationImagesDir = GrabTemplateManager.GetTemplateImagesFolder();
+        Directory.CreateDirectory(destinationImagesDir);
+
+        foreach (string imagePath in Directory.GetFiles(sourceImagesDir))
+        {
+            string destinationPath = Path.Combine(destinationImagesDir, Path.GetFileName(imagePath));
+            File.Copy(imagePath, destinationPath, true);
+        }
+    }
+
+    private static void ExportManagedJsonSettingsFolder(string tempDir)
+    {
+        string sourceFolderPath = AppUtilities.TextGrabSettingsService.ManagedJsonSettingsFolderPath;
+        if (!Directory.Exists(sourceFolderPath))
+            return;
+
+        string[] sourceFiles = Directory.GetFiles(sourceFolderPath, "*.json");
+        if (sourceFiles.Length == 0)
+            return;
+
+        string destinationFolder = Path.Combine(tempDir, ManagedSettingsFolderName);
+        Directory.CreateDirectory(destinationFolder);
+
+        foreach (string sourceFile in sourceFiles)
+        {
+            string destinationPath = Path.Combine(destinationFolder, Path.GetFileName(sourceFile));
+            File.Copy(sourceFile, destinationPath, true);
+        }
+    }
+
+    private static void ImportManagedJsonSettingsFolder(string tempDir)
+    {
+        string sourceFolder = Path.Combine(tempDir, ManagedSettingsFolderName);
+        if (!Directory.Exists(sourceFolder))
+            return;
+
+        string destinationFolder = AppUtilities.TextGrabSettingsService.ManagedJsonSettingsFolderPath;
+        Directory.CreateDirectory(destinationFolder);
+
+        foreach (string sourceFile in Directory.GetFiles(sourceFolder, "*.json"))
+        {
+            string destinationPath = Path.Combine(destinationFolder, Path.GetFileName(sourceFile));
+            File.Copy(sourceFile, destinationPath, true);
+        }
     }
 
     private static async Task ExportHistoryAsync(string tempDir)

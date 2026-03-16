@@ -42,6 +42,15 @@ public static class LanguageUtilities
     public static ILanguage GetOCRLanguage()
         => Singleton<LanguageService>.Instance.GetOCRLanguage();
 
+    public static (string LanguageTag, LanguageKind LanguageKind, bool UsedUiAutomation) GetPersistedLanguageIdentity(object language)
+        => LanguageService.GetPersistedLanguageIdentity(language);
+
+    public static (string LanguageTag, LanguageKind LanguageKind, bool UsedUiAutomation) NormalizePersistedLanguageIdentity(
+        LanguageKind languageKind,
+        string languageTag,
+        bool usedUiAutomation = false)
+        => LanguageService.NormalizePersistedLanguageIdentity(languageKind, languageTag, usedUiAutomation);
+
     /// <summary>
     /// Checks if the current input language is Latin-based.
     /// </summary>

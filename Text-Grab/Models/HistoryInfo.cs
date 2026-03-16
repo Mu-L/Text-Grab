@@ -41,6 +41,9 @@ public class HistoryInfo : IEquatable<HistoryInfo>
 
     public LanguageKind LanguageKind { get; set; } = LanguageKind.Global;
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsedUiAutomation { get; set; }
+
     public bool HasCalcPaneOpen { get; set; } = false;
 
     public int CalcPaneWidth { get; set; } = 0;
@@ -50,15 +53,18 @@ public class HistoryInfo : IEquatable<HistoryInfo>
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(LanguageTag))
+            (string normalizedLanguageTag, LanguageKind normalizedLanguageKind, _) =
+                LanguageUtilities.NormalizePersistedLanguageIdentity(LanguageKind, LanguageTag, UsedUiAutomation);
+
+            if (string.IsNullOrWhiteSpace(normalizedLanguageTag))
                 return new GlobalLang(LanguageUtilities.GetCurrentInputLanguage().AsLanguage() ?? new Language("en-US"));
 
-            return LanguageKind switch
+            return normalizedLanguageKind switch
             {
-                LanguageKind.Global => new GlobalLang(new Language(LanguageTag)),
-                LanguageKind.Tesseract => new TessLang(LanguageTag),
+                LanguageKind.Global => new GlobalLang(new Language(normalizedLanguageTag)),
+                LanguageKind.Tesseract => new TessLang(normalizedLanguageTag),
                 LanguageKind.WindowsAi => new WindowsAiLang(),
-                LanguageKind.UiAutomation => new UiAutomationLang(),
+                LanguageKind.UiAutomation => CaptureLanguageUtilities.GetUiAutomationFallbackLanguage(),
                 _ => new GlobalLang(LanguageUtilities.GetCurrentInputLanguage().AsLanguage() ?? new Language("en-US")),
             };
         }
@@ -99,7 +105,11 @@ public class HistoryInfo : IEquatable<HistoryInfo>
 
     public void ClearTransientImage()
     {
-        ImageContent?.Dispose();
+        // Do not Dispose() here — the bitmap may still be in use by a
+        // fire-and-forget SaveImageFile task (the packaged path is async).
+        // Nulling the reference lets the GC collect once all consumers finish.
+        // The HistoryService.DisposeCachedBitmap() path handles deterministic
+        // cleanup of the captured fullscreen bitmap via its GDI handle.
         ImageContent = null;
     }
 

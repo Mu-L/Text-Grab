@@ -647,11 +647,15 @@ public partial class GrabFrame : Window
         if (historyItem is not null)
             id = historyItem.ID;
 
+        (string languageTag, LanguageKind languageKind, bool usedUiAutomation) =
+            LanguageUtilities.GetPersistedLanguageIdentity(currentLanguage ?? CurrentLanguage);
+
         HistoryInfo historyInfo = new()
         {
             ID = id,
-            LanguageTag = CurrentLanguage.LanguageTag,
-            LanguageKind = LanguageUtilities.GetLanguageKind(currentLanguage ?? CurrentLanguage),
+            LanguageTag = languageTag,
+            LanguageKind = languageKind,
+            UsedUiAutomation = usedUiAutomation,
             CaptureDateTime = DateTimeOffset.UtcNow,
             TextContent = FrameText,
             WordBorderInfoJson = wbInfoJson,

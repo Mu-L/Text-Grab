@@ -157,12 +157,16 @@ public class HistoryService
         HistoryTextOnly = await LoadHistoryAsync(nameof(HistoryTextOnly));
         _textHistoryLoaded = true;
         NormalizeHistoryIds(HistoryTextOnly);
+        if (NormalizeHistoryCompatibilityData(HistoryTextOnly))
+            MarkHistoryDirty();
 
         HistoryWithImage = await LoadHistoryAsync(nameof(HistoryWithImage));
         _imageHistoryLoaded = true;
         NormalizeHistoryIds(HistoryWithImage);
+        if (NormalizeHistoryCompatibilityData(HistoryWithImage))
+            MarkHistoryDirty();
 
-        if (MigrateWordBorderDataToSidecarFiles(HistoryWithImage))
+        if (EnsureWordBorderSidecarFiles(HistoryWithImage))
             MarkHistoryDirty();
 
         TouchHistoryCache();
@@ -244,6 +248,7 @@ public class HistoryService
         if (string.IsNullOrEmpty(historyInfo.ID))
             historyInfo.ID = Guid.NewGuid().ToString();
 
+        NormalizeHistoryCompatibilityData(historyInfo);
         PersistWordBorderData(historyInfo);
 
         if (historyInfo.ImageContent is not null && !string.IsNullOrWhiteSpace(historyInfo.ImagePath))
@@ -272,6 +277,7 @@ public class HistoryService
 
         infoFromFullscreenGrab.ImagePath = $"{imgRandomName}.bmp";
 
+        NormalizeHistoryCompatibilityData(infoFromFullscreenGrab);
         PersistWordBorderData(infoFromFullscreenGrab);
         infoFromFullscreenGrab.ClearTransientImage();
         HistoryWithImage.Add(infoFromFullscreenGrab);
@@ -289,6 +295,7 @@ public class HistoryService
         EnsureTextHistoryLoaded();
         TouchHistoryCache();
         HistoryInfo historyInfo = etwToSave.AsHistoryItem();
+        NormalizeHistoryCompatibilityData(historyInfo);
 
         foreach (HistoryInfo inHistoryItem in HistoryTextOnly)
         {
@@ -314,11 +321,15 @@ public class HistoryService
             return;
 
         if (_textHistoryLoaded)
+        {
+            NormalizeHistoryCompatibilityData(HistoryTextOnly);
             WriteHistoryFiles(HistoryTextOnly, nameof(HistoryTextOnly), maxHistoryTextOnly);
+        }
 
         if (_imageHistoryLoaded)
         {
             ClearOldImages();
+            NormalizeHistoryCompatibilityData(HistoryWithImage);
             PersistWordBorderData(HistoryWithImage);
             WriteHistoryFiles(HistoryWithImage, nameof(HistoryWithImage), maxHistoryWithImages);
             DeleteUnusedWordBorderFiles(HistoryWithImage);
@@ -513,8 +524,10 @@ public class HistoryService
         HistoryWithImage = LoadHistoryBlocking(nameof(HistoryWithImage));
         _imageHistoryLoaded = true;
         NormalizeHistoryIds(HistoryWithImage);
+        if (NormalizeHistoryCompatibilityData(HistoryWithImage))
+            MarkHistoryDirty();
 
-        if (MigrateWordBorderDataToSidecarFiles(HistoryWithImage))
+        if (EnsureWordBorderSidecarFiles(HistoryWithImage))
             MarkHistoryDirty();
     }
 
@@ -526,6 +539,8 @@ public class HistoryService
         HistoryTextOnly = LoadHistoryBlocking(nameof(HistoryTextOnly));
         _textHistoryLoaded = true;
         NormalizeHistoryIds(HistoryTextOnly);
+        if (NormalizeHistoryCompatibilityData(HistoryTextOnly))
+            MarkHistoryDirty();
     }
 
     private void HistoryCacheReleaseTimer_Tick(object? sender, EventArgs e)
@@ -639,7 +654,7 @@ public class HistoryService
         saveTimer.Start();
     }
 
-    private bool MigrateWordBorderDataToSidecarFiles(IEnumerable<HistoryInfo> historyItems)
+    private bool EnsureWordBorderSidecarFiles(IEnumerable<HistoryInfo> historyItems)
     {
         bool migratedAnyWordBorderData = false;
 
@@ -652,13 +667,47 @@ public class HistoryService
         return migratedAnyWordBorderData;
     }
 
-    private static void PersistWordBorderData(IEnumerable<HistoryInfo> historyItems)
+    private static bool NormalizeHistoryCompatibilityData(IEnumerable<HistoryInfo> historyItems)
+    {
+        bool normalizedAnyHistoryItems = false;
+
+        foreach (HistoryInfo historyItem in historyItems)
+        {
+            if (NormalizeHistoryCompatibilityData(historyItem))
+                normalizedAnyHistoryItems = true;
+        }
+
+        return normalizedAnyHistoryItems;
+    }
+
+    private static bool NormalizeHistoryCompatibilityData(HistoryInfo historyItem)
+    {
+        (string normalizedLanguageTag, LanguageKind normalizedLanguageKind, bool usedUiAutomation) =
+            LanguageUtilities.NormalizePersistedLanguageIdentity(
+                historyItem.LanguageKind,
+                historyItem.LanguageTag,
+                historyItem.UsedUiAutomation);
+
+        if (string.Equals(historyItem.LanguageTag, normalizedLanguageTag, StringComparison.Ordinal)
+            && historyItem.LanguageKind == normalizedLanguageKind
+            && historyItem.UsedUiAutomation == usedUiAutomation)
+        {
+            return false;
+        }
+
+        historyItem.LanguageTag = normalizedLanguageTag;
+        historyItem.LanguageKind = normalizedLanguageKind;
+        historyItem.UsedUiAutomation = usedUiAutomation;
+        return true;
+    }
+
+    private void PersistWordBorderData(IEnumerable<HistoryInfo> historyItems)
     {
         foreach (HistoryInfo historyItem in historyItems)
             PersistWordBorderData(historyItem);
     }
 
-    private static bool PersistWordBorderData(HistoryInfo historyItem)
+    private bool PersistWordBorderData(HistoryInfo historyItem)
     {
         if (string.IsNullOrWhiteSpace(historyItem.WordBorderInfoJson))
             return false;
@@ -676,7 +725,12 @@ public class HistoryService
         }
 
         historyItem.WordBorderInfoFileName = wordBorderInfoFileName;
-        historyItem.ClearTransientWordBorderData();
+
+        // When file-backed settings are enabled, the sidecar file is the authority
+        // for word border data, so drop the inline JSON to reduce memory/disk usage.
+        if (DefaultSettings.EnableFileBackedManagedSettings)
+            historyItem.ClearTransientWordBorderData();
+
         return true;
     }
 

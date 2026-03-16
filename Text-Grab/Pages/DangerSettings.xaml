@@ -70,6 +70,39 @@
             ButtonText="Import Settings"
             Click="ImportSettingsButton_Click" />
 
+        <Border
+            Margin="0,20,0,0"
+            Padding="12"
+            Background="#14FFA500"
+            BorderBrush="DarkOrange"
+            BorderThickness="1"
+            CornerRadius="6">
+            <StackPanel>
+                <TextBlock
+                    FontWeight="Bold"
+                    Style="{StaticResource TextBodyNormal}"
+                    Text="Experimental file-backed settings storage" />
+                <TextBlock
+                    Margin="0,6,0,0"
+                    Style="{StaticResource TextBodyNormal}"
+                    TextWrapping="Wrap">
+                    <Run Text="This transition feature keeps a second file-backed copy of large settings and can reduce Text Grab's RAM usage by moving large settings payloads out of the main settings store. It is off by default for rollback safety." />
+                    <LineBreak />
+                    <Hyperlink Click="BackupSettingsHyperlink_Click">Backup your settings</Hyperlink>
+                    <Run Text=" before enabling it, then restart Text Grab. The restart applies the new storage preference on launch so Text Grab can keep the legacy strings and the file-backed copies in sync." />
+                </TextBlock>
+                <ui:ToggleSwitch
+                    x:Name="EnableFileBackedManagedSettingsToggle"
+                    Margin="0,10,0,0"
+                    Checked="EnableFileBackedManagedSettingsToggle_Checked"
+                    Unchecked="EnableFileBackedManagedSettingsToggle_Checked">
+                    <TextBlock Style="{StaticResource TextBodyNormal}">
+                        Enable experimental file-backed settings storage (restart required)
+                    </TextBlock>
+                </ui:ToggleSwitch>
+            </StackPanel>
+        </Border>
+
         <TextBlock Margin="0,12,0,0" Style="{StaticResource TextBodyNormal}">
             Check CPU Architecture before enabling Windows Local AI model features
         </TextBlock>

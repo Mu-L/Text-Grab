@@ -1082,12 +1082,16 @@ public partial class FullscreenGrab
                     ? new Bitmap(cachedBitmap)
                     : null;
 
+            (string languageTag, LanguageKind languageKind, bool usedUiAutomation) =
+                LanguageUtilities.GetPersistedLanguageIdentity(selectedOcrLang);
+
             historyInfo = new HistoryInfo
             {
                 ID = Guid.NewGuid().ToString(),
                 DpiScaleFactor = GetCurrentDeviceScale(),
-                LanguageTag = LanguageUtilities.GetLanguageTag(selectedOcrLang),
-                LanguageKind = LanguageUtilities.GetLanguageKind(selectedOcrLang),
+                LanguageTag = languageTag,
+                LanguageKind = languageKind,
+                UsedUiAutomation = usedUiAutomation,
                 CaptureDateTime = DateTimeOffset.Now,
                 PositionRect = GetHistoryPositionRect(selection),
                 IsTable = TableToggleButton.IsChecked!.Value,

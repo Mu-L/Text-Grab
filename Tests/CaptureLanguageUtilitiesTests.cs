@@ -1,10 +1,27 @@
+using Text_Grab.Interfaces;
 using Text_Grab.Models;
+using Text_Grab.Properties;
 using Text_Grab.Utilities;
 
 namespace Tests;
 
-public class CaptureLanguageUtilitiesTests
+[Collection("Settings isolation")]
+public class CaptureLanguageUtilitiesTests : IDisposable
 {
+    private readonly bool _originalUiAutomationEnabled;
+
+    public CaptureLanguageUtilitiesTests()
+    {
+        _originalUiAutomationEnabled = Settings.Default.UiAutomationEnabled;
+    }
+
+    public void Dispose()
+    {
+        Settings.Default.UiAutomationEnabled = _originalUiAutomationEnabled;
+        Settings.Default.Save();
+        LanguageUtilities.InvalidateAllCaches();
+    }
+
     [Fact]
     public void MatchesPersistedLanguage_MatchesByLanguageTag()
     {
@@ -28,7 +45,7 @@ public class CaptureLanguageUtilitiesTests
     [Fact]
     public void FindPreferredLanguageIndex_PrefersPersistedMatchBeforeFallbackLanguage()
     {
-        List<Text_Grab.Interfaces.ILanguage> languages =
+        List<ILanguage> languages =
         [
             new UiAutomationLang(),
             new WindowsAiLang(),
@@ -41,6 +58,30 @@ public class CaptureLanguageUtilitiesTests
             new GlobalLang("en-US"));
 
         Assert.Equal(0, index);
+    }
+
+    [WpfFact]
+    public async Task GetCaptureLanguagesAsync_ExcludesUiAutomationByDefault()
+    {
+        Settings.Default.UiAutomationEnabled = false;
+        Settings.Default.Save();
+        LanguageUtilities.InvalidateAllCaches();
+
+        List<ILanguage> languages = await CaptureLanguageUtilities.GetCaptureLanguagesAsync(includeTesseract: false);
+
+        Assert.DoesNotContain(languages, language => language is UiAutomationLang);
+    }
+
+    [WpfFact]
+    public async Task GetCaptureLanguagesAsync_IncludesUiAutomationWhenEnabled()
+    {
+        Settings.Default.UiAutomationEnabled = true;
+        Settings.Default.Save();
+        LanguageUtilities.InvalidateAllCaches();
+
+        List<ILanguage> languages = await CaptureLanguageUtilities.GetCaptureLanguagesAsync(includeTesseract: false);
+
+        Assert.Contains(languages, language => language is UiAutomationLang);
     }
 
     [Fact]

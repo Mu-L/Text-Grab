@@ -134,6 +134,8 @@ public partial class LanguageSettings : Page
             UiAutomationTraversalModeComboBox.SelectedItem = traversalMode;
         else
             UiAutomationTraversalModeComboBox.SelectedItem = UiAutomationTraversalMode.Balanced;
+
+        UpdateUiAutomationControlState();
     }
 
     private async void InstallButton_Click(object sender, RoutedEventArgs e)
@@ -169,6 +171,7 @@ public partial class LanguageSettings : Page
         DefaultSettings.UiAutomationEnabled = UiAutomationEnabledToggle.IsChecked is true;
         DefaultSettings.Save();
         LanguageUtilities.InvalidateAllCaches();
+        UpdateUiAutomationControlState();
     }
 
     private void UiAutomationFallbackToggle_Checked(object sender, RoutedEventArgs e)
@@ -206,6 +209,13 @@ public partial class LanguageSettings : Page
 
         DefaultSettings.UiAutomationTraversalMode = traversalMode.ToString();
         DefaultSettings.Save();
+    }
+
+    private void UpdateUiAutomationControlState()
+    {
+        UiAutomationAdvancedOptionsPanel.Visibility = DefaultSettings.UiAutomationEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     public async Task CopyFileWithElevatedPermissions(string sourcePath, string destinationPath)

@@ -12,11 +12,15 @@ using Wpf.Ui.Controls;
 namespace Text_Grab.Utilities;
 
 /// <summary>
-/// Provides CRUD operations for <see cref="GrabTemplate"/> objects, persisted as
-/// a JSON file on disk. Previously stored in application settings, but moved to
-/// file-based storage because ApplicationDataContainer has an 8 KB per-value limit.
-/// Pattern follows <see cref="PostGrabActionManager"/>.
+/// Provides CRUD operations for <see cref="GrabTemplate"/> objects, keeping the
+/// legacy settings string and the file-backed JSON representation in sync during
+/// the transition release. Pattern follows <see cref="PostGrabActionManager"/>.
 /// </summary>
+/// <remarks>
+/// TODO: This class has no thread-safety guards. All current callers are UI-thread
+/// methods so this is safe today, but if templates are ever read/written from
+/// background threads a lock (like SettingsService._managedJsonLock) should be added.
+/// </remarks>
 public static class GrabTemplateManager
 {
     private static readonly Settings DefaultSettings = AppUtilities.TextGrabSettings;
@@ -28,10 +32,16 @@ public static class GrabTemplateManager
     };
 
     private const string TemplatesFileName = "GrabTemplates.json";
-    private static bool _migrated;
 
-    // Allow tests to override the file path
+    // Allow tests to override the file path.
+    // TODO: If more test seams are needed, consider consolidating these into a small
+    // options/config object instead of individual static properties.
     internal static string? TestFilePath { get; set; }
+    internal static string? TestImagesFolderPath { get; set; }
+    internal static bool? TestPreferFileBackedMode { get; set; }
+
+    private static bool PreferFileBackedTemplates =>
+        TestPreferFileBackedMode ?? AppUtilities.TextGrabSettingsService.IsFileBackedManagedSettingsEnabled;
 
     // ── File path ─────────────────────────────────────────────────────────────
 
@@ -94,6 +104,15 @@ public static class GrabTemplateManager
     /// <summary>Returns the folder where template reference images are stored alongside the templates JSON.</summary>
     public static string GetTemplateImagesFolder()
     {
+        if (TestImagesFolderPath is not null)
+            return TestImagesFolderPath;
+
+        if (TestFilePath is not null)
+        {
+            string? testDir = Path.GetDirectoryName(TestFilePath);
+            return Path.Combine(testDir ?? Path.GetTempPath(), "template-images");
+        }
+
         if (AppUtilities.IsPackaged())
         {
             string localFolder = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
@@ -104,61 +123,14 @@ public static class GrabTemplateManager
         return Path.Combine(exeDir ?? "c:\\Text-Grab", "template-images");
     }
 
-    // ── Migration from settings ───────────────────────────────────────────────
-
-    private static void MigrateFromSettingsIfNeeded()
-    {
-        if (_migrated)
-            return;
-
-        _migrated = true;
-
-        string filePath = GetTemplatesFilePath();
-        if (File.Exists(filePath))
-            return;
-
-        try
-        {
-            string settingsJson = DefaultSettings.GrabTemplatesJSON;
-            if (string.IsNullOrWhiteSpace(settingsJson))
-                return;
-
-            // Validate the JSON before migrating
-            List<GrabTemplate>? templates = JsonSerializer.Deserialize<List<GrabTemplate>>(settingsJson, JsonOptions);
-            if (templates is null || templates.Count == 0)
-                return;
-
-            string? dir = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            File.WriteAllText(filePath, settingsJson);
-
-            // Clear the setting so it no longer overflows the container
-            DefaultSettings.GrabTemplatesJSON = string.Empty;
-            DefaultSettings.Save();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to migrate GrabTemplates from settings to file: {ex.Message}");
-        }
-    }
-
     // ── Read ──────────────────────────────────────────────────────────────────
 
     /// <summary>Returns all saved templates, or an empty list if none exist.</summary>
     public static List<GrabTemplate> GetAllTemplates()
     {
-        MigrateFromSettingsIfNeeded();
-
-        string filePath = GetTemplatesFilePath();
-
-        if (!File.Exists(filePath))
-            return [];
-
         try
         {
-            string json = File.ReadAllText(filePath);
+            string json = ResolveTemplatesJson();
 
             if (string.IsNullOrWhiteSpace(json))
                 return [];
@@ -194,13 +166,22 @@ public static class GrabTemplateManager
     public static void SaveTemplates(List<GrabTemplate> templates)
     {
         string json = JsonSerializer.Serialize(templates, JsonOptions);
-        string filePath = GetTemplatesFilePath();
+        SaveTemplatesJson(json);
+    }
 
-        string? dir = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
+    internal static string GetTemplatesJsonForExport()
+    {
+        List<GrabTemplate> templates = GetAllTemplates();
+        return JsonSerializer.Serialize(templates, JsonOptions);
+    }
 
-        File.WriteAllText(filePath, json);
+    internal static void ImportTemplatesFromJson(string templatesJson)
+    {
+        List<GrabTemplate> templates = string.IsNullOrWhiteSpace(templatesJson)
+            ? []
+            : JsonSerializer.Deserialize<List<GrabTemplate>>(templatesJson, JsonOptions) ?? [];
+
+        SaveTemplates(templates);
     }
 
     /// <summary>Adds a new template (or updates an existing one with the same ID).</summary>
@@ -278,5 +259,79 @@ public static class GrabTemplateManager
 
         template.LastUsedDate = DateTimeOffset.Now;
         SaveTemplates(templates);
+    }
+
+    private static string ResolveTemplatesJson()
+    {
+        string settingsJson = DefaultSettings.GrabTemplatesJSON;
+        string fileJson = TryReadTemplatesFileText();
+        string preferredJson = PreferFileBackedTemplates ? fileJson : settingsJson;
+        string secondaryJson = PreferFileBackedTemplates ? settingsJson : fileJson;
+        string selectedJson = string.IsNullOrWhiteSpace(preferredJson)
+            ? secondaryJson
+            : preferredJson;
+
+        if (string.IsNullOrWhiteSpace(selectedJson))
+            return string.Empty;
+
+        if (!string.Equals(settingsJson, selectedJson, StringComparison.Ordinal))
+            SetLegacyTemplatesJson(selectedJson);
+
+        if (!string.Equals(fileJson, selectedJson, StringComparison.Ordinal))
+            TryWriteTemplatesFile(selectedJson);
+
+        return selectedJson;
+    }
+
+    private static string TryReadTemplatesFileText()
+    {
+        string filePath = GetTemplatesFilePath();
+        if (!File.Exists(filePath))
+            return string.Empty;
+
+        try
+        {
+            return File.ReadAllText(filePath);
+        }
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Failed to read GrabTemplates file: {ex.Message}");
+            return string.Empty;
+        }
+    }
+
+    private static void SaveTemplatesJson(string json)
+    {
+        SetLegacyTemplatesJson(json);
+        TryWriteTemplatesFile(json);
+    }
+
+    private static void SetLegacyTemplatesJson(string json)
+    {
+        if (string.Equals(DefaultSettings.GrabTemplatesJSON, json, StringComparison.Ordinal))
+            return;
+
+        DefaultSettings.GrabTemplatesJSON = json;
+        DefaultSettings.Save();
+    }
+
+    private static bool TryWriteTemplatesFile(string json)
+    {
+        string filePath = GetTemplatesFilePath();
+
+        try
+        {
+            string? dir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            File.WriteAllText(filePath, json);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to persist GrabTemplates file: {ex.Message}");
+            return false;
+        }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
 using Text_Grab.Interfaces;
@@ -42,7 +43,7 @@ public class LanguageService
     /// </summary>
     public ILanguage GetCurrentInputLanguage()
     {
-        string currentInputLangTag = InputLanguageManager.Current.CurrentInputLanguage.Name;
+        string currentInputLangTag = GetCurrentInputLanguageTag();
 
         lock (_cacheLock)
         {
@@ -124,6 +125,32 @@ public class LanguageService
         };
     }
 
+    public static (string LanguageTag, LanguageKind LanguageKind, bool UsedUiAutomation) GetPersistedLanguageIdentity(object language)
+    {
+        if (language is UiAutomationLang)
+        {
+            ILanguage fallbackLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+            return (fallbackLanguage.LanguageTag, LanguageKind.Global, true);
+        }
+
+        return (GetLanguageTag(language), GetLanguageKind(language), false);
+    }
+
+    public static (string LanguageTag, LanguageKind LanguageKind, bool UsedUiAutomation) NormalizePersistedLanguageIdentity(
+        LanguageKind languageKind,
+        string languageTag,
+        bool usedUiAutomation = false)
+    {
+        if (languageKind == LanguageKind.UiAutomation
+            || string.Equals(languageTag, _uiAutomationLangTag, StringComparison.OrdinalIgnoreCase))
+        {
+            ILanguage fallbackLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+            return (fallbackLanguage.LanguageTag, LanguageKind.Global, true);
+        }
+
+        return (languageTag, languageKind, usedUiAutomation);
+    }
+
     /// <summary>
     /// Gets the OCR language to use based on settings and available languages.
     /// Cached based on LastUsedLang setting.
@@ -158,15 +185,22 @@ public class LanguageService
                     return _cachedOcrLanguage;
                 }
 
-                try
+                if (lastUsedLang == _uiAutomationLangTag)
                 {
-                    selectedLanguage = new GlobalLang(lastUsedLang);
+                    selectedLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
                 }
-                catch (Exception ex)
+                else
                 {
-                    Debug.WriteLine($"Failed to parse LastUsedLang: {lastUsedLang}\n{ex.Message}");
-                    // if the language tag is invalid, reset to current input language
-                    selectedLanguage = GetCurrentInputLanguage();
+                    try
+                    {
+                        selectedLanguage = new GlobalLang(lastUsedLang);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to parse LastUsedLang: {lastUsedLang}\n{ex.Message}");
+                        // if the language tag is invalid, reset to current input language
+                        selectedLanguage = GetCurrentInputLanguage();
+                    }
                 }
             }
 
@@ -219,7 +253,7 @@ public class LanguageService
     /// </summary>
     public string GetSystemLanguageForTranslation()
     {
-        string currentInputLangTag = InputLanguageManager.Current.CurrentInputLanguage.Name;
+        string currentInputLangTag = GetCurrentInputLanguageTag();
 
         lock (_cacheLock)
         {
@@ -310,4 +344,26 @@ public class LanguageService
     }
 
     #endregion Public Methods
+
+    private static string GetCurrentInputLanguageTag()
+    {
+        string? currentInputLangTag = null;
+        try
+        {
+            currentInputLangTag = InputLanguageManager.Current?.CurrentInputLanguage?.Name;
+        }
+        catch (NullReferenceException)
+        {
+            currentInputLangTag = null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentInputLangTag))
+            return currentInputLangTag;
+
+        currentInputLangTag = CultureInfo.CurrentUICulture.Name;
+        if (!string.IsNullOrWhiteSpace(currentInputLangTag))
+            return currentInputLangTag;
+
+        return "en-US";
+    }
 }

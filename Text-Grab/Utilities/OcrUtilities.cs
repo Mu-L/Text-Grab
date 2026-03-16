@@ -283,6 +283,8 @@ public static partial class OcrUtilities
 
         ILanguage language = lastFsg.OcrLanguage ?? LanguageUtilities.GetCurrentInputLanguage();
         string grabbedText = await GetTextFromAbsoluteRectAsync(scaledRect, language);
+        (string languageTag, LanguageKind languageKind, bool usedUiAutomation) =
+            LanguageUtilities.GetPersistedLanguageIdentity(language);
 
         HistoryInfo newPrevRegionHistory = new()
         {
@@ -291,8 +293,9 @@ public static partial class OcrUtilities
             ImageContent = Singleton<HistoryService>.Instance.CachedBitmap,
             TextContent = grabbedText,
             PositionRect = lastFsg.PositionRect,
-            LanguageTag = language.LanguageTag,
-            LanguageKind = LanguageUtilities.GetLanguageKind(language),
+            LanguageTag = languageTag,
+            LanguageKind = languageKind,
+            UsedUiAutomation = usedUiAutomation,
             IsTable = lastFsg.IsTable,
             SourceMode = TextGrabMode.Fullscreen,
             DpiScaleFactor = lastFsg.DpiScaleFactor,
@@ -319,6 +322,8 @@ public static partial class OcrUtilities
 
         ILanguage language = lastFsg.OcrLanguage ?? LanguageUtilities.GetCurrentInputLanguage();
         string grabbedText = await GetTextFromAbsoluteRectAsync(scaledRect, language);
+        (string languageTag, LanguageKind languageKind, bool usedUiAutomation) =
+            LanguageUtilities.GetPersistedLanguageIdentity(language);
 
         HistoryInfo newPrevRegionHistory = new()
         {
@@ -327,8 +332,9 @@ public static partial class OcrUtilities
             ImageContent = Singleton<HistoryService>.Instance.CachedBitmap,
             TextContent = grabbedText,
             PositionRect = lastFsg.PositionRect,
-            LanguageTag = language.LanguageTag,
-            LanguageKind = LanguageUtilities.GetLanguageKind(language),
+            LanguageTag = languageTag,
+            LanguageKind = languageKind,
+            UsedUiAutomation = usedUiAutomation,
             IsTable = lastFsg.IsTable,
             SourceMode = TextGrabMode.Fullscreen,
             DpiScaleFactor = lastFsg.DpiScaleFactor,

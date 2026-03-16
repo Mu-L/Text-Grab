@@ -1,34 +1,102 @@
 using System.IO;
+using System.Text.Json;
 using Text_Grab.Models;
+using Text_Grab.Properties;
 using Text_Grab.Utilities;
 
 namespace Tests;
 
+[Collection("Settings isolation")]
 public class GrabTemplateManagerTests : IDisposable
 {
-    // Use a temp file so tests don't pollute each other or real user data
     private readonly string _tempFilePath;
+    private readonly string _tempImagesFolder;
+    private readonly string _originalGrabTemplatesJson;
+    private readonly bool _originalEnableFileBackedManagedSettings;
+    private readonly bool? _originalTestPreferFileBackedMode;
 
     public GrabTemplateManagerTests()
     {
         _tempFilePath = Path.Combine(Path.GetTempPath(), $"GrabTemplates_Test_{Guid.NewGuid()}.json");
+        _tempImagesFolder = Path.Combine(Path.GetTempPath(), $"GrabTemplateImages_Test_{Guid.NewGuid()}");
+        _originalGrabTemplatesJson = Settings.Default.GrabTemplatesJSON;
+        _originalEnableFileBackedManagedSettings = Settings.Default.EnableFileBackedManagedSettings;
+        _originalTestPreferFileBackedMode = GrabTemplateManager.TestPreferFileBackedMode;
+
         GrabTemplateManager.TestFilePath = _tempFilePath;
+        GrabTemplateManager.TestImagesFolderPath = _tempImagesFolder;
+        GrabTemplateManager.TestPreferFileBackedMode = false;
+
+        Settings.Default.GrabTemplatesJSON = string.Empty;
+        Settings.Default.EnableFileBackedManagedSettings = false;
+        Settings.Default.Save();
     }
 
     public void Dispose()
     {
         GrabTemplateManager.TestFilePath = null;
+        GrabTemplateManager.TestImagesFolderPath = null;
+        GrabTemplateManager.TestPreferFileBackedMode = _originalTestPreferFileBackedMode;
+
+        Settings.Default.GrabTemplatesJSON = _originalGrabTemplatesJson;
+        Settings.Default.EnableFileBackedManagedSettings = _originalEnableFileBackedManagedSettings;
+        Settings.Default.Save();
+
         if (File.Exists(_tempFilePath))
             File.Delete(_tempFilePath);
-    }
 
-    // ── GetAllTemplates ───────────────────────────────────────────────────────
+        if (Directory.Exists(_tempImagesFolder))
+            Directory.Delete(_tempImagesFolder, true);
+    }
 
     [Fact]
     public void GetAllTemplates_WhenEmpty_ReturnsEmptyList()
     {
         List<GrabTemplate> templates = GrabTemplateManager.GetAllTemplates();
         Assert.Empty(templates);
+    }
+
+    [Fact]
+    public void GetAllTemplates_BackfillsLegacyFromSidecarWhenLegacyMissing()
+    {
+        GrabTemplate template = CreateSampleTemplate("Recovered");
+        File.WriteAllText(_tempFilePath, JsonSerializer.Serialize(new[] { template }));
+
+        List<GrabTemplate> templates = GrabTemplateManager.GetAllTemplates();
+
+        GrabTemplate recoveredTemplate = Assert.Single(templates);
+        Assert.Equal(template.Id, recoveredTemplate.Id);
+        Assert.Contains(template.Id, Settings.Default.GrabTemplatesJSON);
+    }
+
+    [Fact]
+    public void GetAllTemplates_FileBackedModePrefersFileAndBackfillsLegacy()
+    {
+        GrabTemplateManager.TestPreferFileBackedMode = true;
+        GrabTemplate legacyTemplate = CreateSampleTemplate("Legacy");
+        GrabTemplate sidecarTemplate = CreateSampleTemplate("Sidecar");
+
+        Settings.Default.GrabTemplatesJSON = JsonSerializer.Serialize(new[] { legacyTemplate });
+        Settings.Default.Save();
+        File.WriteAllText(_tempFilePath, JsonSerializer.Serialize(new[] { sidecarTemplate }));
+
+        List<GrabTemplate> templates = GrabTemplateManager.GetAllTemplates();
+
+        GrabTemplate preferredTemplate = Assert.Single(templates);
+        Assert.Equal(sidecarTemplate.Id, preferredTemplate.Id);
+        Assert.Contains(sidecarTemplate.Id, Settings.Default.GrabTemplatesJSON);
+    }
+
+    [Fact]
+    public void SaveTemplates_WritesBothFileAndLegacySetting()
+    {
+        GrabTemplate template = CreateSampleTemplate("Invoice");
+
+        GrabTemplateManager.SaveTemplates([template]);
+
+        Assert.True(File.Exists(_tempFilePath));
+        Assert.Contains(template.Id, File.ReadAllText(_tempFilePath));
+        Assert.Contains(template.Id, Settings.Default.GrabTemplatesJSON);
     }
 
     [Fact]
@@ -41,8 +109,6 @@ public class GrabTemplateManagerTests : IDisposable
         Assert.Single(templates);
         Assert.Equal("Invoice", templates[0].Name);
     }
-
-    // ── GetTemplateById ───────────────────────────────────────────────────────
 
     [Fact]
     public void GetTemplateById_ExistingId_ReturnsTemplate()
@@ -63,8 +129,6 @@ public class GrabTemplateManagerTests : IDisposable
         GrabTemplate? found = GrabTemplateManager.GetTemplateById("non-existent-id");
         Assert.Null(found);
     }
-
-    // ── AddOrUpdateTemplate ───────────────────────────────────────────────────
 
     [Fact]
     public void AddOrUpdateTemplate_AddNew_IncrementsCount()
@@ -90,8 +154,6 @@ public class GrabTemplateManagerTests : IDisposable
         Assert.Equal("Updated Name", templates[0].Name);
     }
 
-    // ── DeleteTemplate ────────────────────────────────────────────────────────
-
     [Fact]
     public void DeleteTemplate_ExistingId_RemovesTemplate()
     {
@@ -110,11 +172,8 @@ public class GrabTemplateManagerTests : IDisposable
         GrabTemplateManager.AddOrUpdateTemplate(CreateSampleTemplate("Keeper"));
         GrabTemplateManager.DeleteTemplate("does-not-exist");
 
-        // Should still have the original template
         Assert.Single(GrabTemplateManager.GetAllTemplates());
     }
-
-    // ── DuplicateTemplate ─────────────────────────────────────────────────────
 
     [Fact]
     public void DuplicateTemplate_ValidId_CreatesNewTemplateWithCopyPrefix()
@@ -137,8 +196,6 @@ public class GrabTemplateManagerTests : IDisposable
         Assert.Null(copy);
     }
 
-    // ── CreateButtonInfoForTemplate ───────────────────────────────────────────
-
     [Fact]
     public void CreateButtonInfoForTemplate_SetsTemplateId()
     {
@@ -151,8 +208,6 @@ public class GrabTemplateManagerTests : IDisposable
         Assert.Equal(template.Name, button.ButtonText);
     }
 
-    // ── Corrupt JSON robustness ───────────────────────────────────────────────
-
     [Fact]
     public void GetAllTemplates_CorruptJson_ReturnsEmptyList()
     {
@@ -161,8 +216,6 @@ public class GrabTemplateManagerTests : IDisposable
         List<GrabTemplate> templates = GrabTemplateManager.GetAllTemplates();
         Assert.Empty(templates);
     }
-
-    // ── GrabTemplate model ────────────────────────────────────────────────────
 
     [Fact]
     public void GrabTemplate_IsValid_TrueWhenNameRegionsAndOutputTemplateSet()
@@ -198,8 +251,6 @@ public class GrabTemplateManagerTests : IDisposable
         Assert.Contains(2, referenced);
         Assert.Equal(2, referenced.Count);
     }
-
-    // ── Helper ────────────────────────────────────────────────────────────────
 
     private static GrabTemplate CreateSampleTemplate(string name)
     {

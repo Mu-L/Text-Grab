@@ -793,7 +793,19 @@ namespace Text_Grab.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool EnableFileBackedManagedSettings {
+            get {
+                return ((bool)(this["EnableFileBackedManagedSettings"]));
+            }
+            set {
+                this["EnableFileBackedManagedSettings"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool UiAutomationEnabled {
             get {
                 return ((bool)(this["UiAutomationEnabled"]));

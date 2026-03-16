@@ -194,8 +194,11 @@
     <Setting Name="OverrideAiArchCheck" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
+    <Setting Name="EnableFileBackedManagedSettings" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
     <Setting Name="UiAutomationEnabled" Type="System.Boolean" Scope="User">
-      <Value Profile="(Default)">True</Value>
+      <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="UiAutomationFallbackToOcr" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>

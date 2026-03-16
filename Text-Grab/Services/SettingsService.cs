@@ -30,6 +30,7 @@ internal class SettingsService : IDisposable
     private readonly ApplicationDataContainer? _localSettings;
     private readonly string _managedJsonSettingsFolderPath;
     private readonly bool _saveClassicSettingsChanges;
+    private readonly bool _preferFileBackedManagedSettings;
     private readonly Lock _managedJsonLock = new();
     private bool _suppressManagedJsonPropertyChanged;
     private StoredRegex[]? _cachedRegexPatterns;
@@ -41,6 +42,10 @@ internal class SettingsService : IDisposable
     // relevant discussion https://github.com/microsoft/WindowsAppSDK/discussions/1478
 
     public Properties.Settings ClassicSettings;
+
+    internal bool IsFileBackedManagedSettingsEnabled => _preferFileBackedManagedSettings;
+
+    internal string ManagedJsonSettingsFolderPath => _managedJsonSettingsFolderPath;
 
     public SettingsService()
         : this(
@@ -59,6 +64,7 @@ internal class SettingsService : IDisposable
         _localSettings = localSettings;
         _managedJsonSettingsFolderPath = managedJsonSettingsFolderPath ?? GetManagedJsonSettingsFolderPath();
         _saveClassicSettingsChanges = saveClassicSettingsChanges;
+        _preferFileBackedManagedSettings = ClassicSettings.EnableFileBackedManagedSettings;
 
         if (ClassicSettings.FirstRun && _localSettings is not null && _localSettings.Values.Count > 0)
             MigrateLocalSettingsToClassic();
@@ -67,9 +73,6 @@ internal class SettingsService : IDisposable
         // so that when app updates they can be copied forward
         ClassicSettings.PropertyChanged -= ClassicSettings_PropertyChanged;
         ClassicSettings.PropertyChanged += ClassicSettings_PropertyChanged;
-
-        MigrateManagedJsonSettingsToFiles();
-        RemoveManagedJsonSettingsFromContainer();
     }
 
     private void MigrateLocalSettingsToClassic()
@@ -122,7 +125,8 @@ internal class SettingsService : IDisposable
         if (!IsManagedJsonSetting(propertyName))
             return ClassicSettings[propertyName] as string ?? string.Empty;
 
-        return ReadManagedJsonSettingText(propertyName);
+        // Use the read-only path so that an export never mutates existing settings.
+        return ReadManagedJsonSettingTextForExport(propertyName);
     }
 
     public T? GetSettingFromContainer<T>(string name)
@@ -281,56 +285,20 @@ internal class SettingsService : IDisposable
         InvalidateManagedJsonCache(propertyName);
 
         string managedJsonValue = ClassicSettings[propertyName] as string ?? string.Empty;
+        PersistManagedJsonSetting(propertyName, managedJsonValue);
+    }
+
+    private void PersistManagedJsonSetting(string propertyName, string managedJsonValue)
+    {
         if (string.IsNullOrWhiteSpace(managedJsonValue))
         {
             DeleteManagedJsonSettingFile(propertyName);
-            RemoveSettingFromContainer(propertyName);
+            SaveSettingInContainer(propertyName, string.Empty);
             return;
         }
 
-        if (TryWriteManagedJsonSettingText(propertyName, managedJsonValue))
-        {
-            ClearManagedJsonSetting(propertyName);
-            return;
-        }
-
+        TryWriteManagedJsonSettingText(propertyName, managedJsonValue);
         SaveSettingInContainer(propertyName, managedJsonValue);
-    }
-
-    private void MigrateManagedJsonSettingsToFiles()
-    {
-        bool migratedAnySettings = false;
-
-        foreach (string propertyName in ManagedJsonSettingFiles.Keys)
-        {
-            string managedJsonValue = ClassicSettings[propertyName] as string ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(managedJsonValue))
-                continue;
-
-            if (!TryWriteManagedJsonSettingText(propertyName, managedJsonValue))
-                continue;
-
-            ClearManagedJsonSetting(propertyName);
-            migratedAnySettings = true;
-        }
-
-        if (migratedAnySettings && _saveClassicSettingsChanges)
-            ClassicSettings.Save();
-    }
-
-    private void RemoveManagedJsonSettingsFromContainer()
-    {
-        if (_localSettings is null)
-            return;
-
-        foreach (string propertyName in ManagedJsonSettingFiles.Keys)
-        {
-            string filePath = GetManagedJsonSettingFilePath(propertyName);
-            string classicValue = ClassicSettings[propertyName] as string ?? string.Empty;
-
-            if (File.Exists(filePath) || string.IsNullOrWhiteSpace(classicValue))
-                RemoveSettingFromContainer(propertyName);
-        }
     }
 
     private T LoadManagedJson<T>(
@@ -377,22 +345,18 @@ internal class SettingsService : IDisposable
     {
         T cachedCopy = clone(value);
         string json = JsonSerializer.Serialize(cachedCopy);
-        bool persistedToFile = TryWriteManagedJsonSettingText(propertyName, json);
 
         lock (_managedJsonLock)
         {
             cachedValue = clone(cachedCopy);
         }
 
-        if (persistedToFile)
-        {
-            ClearManagedJsonSetting(propertyName);
-        }
-        else
-        {
-            SetManagedJsonSettingValue(propertyName, json);
-            SaveSettingInContainer(propertyName, json);
-        }
+        // Three storage targets are written independently:
+        //   1. ClassicSettings (in-memory) — via SetManagedJsonSettingValue (suppressed to avoid re-entry)
+        //   2. Sidecar JSON file + ApplicationDataContainer — via PersistManagedJsonSetting
+        //   3. ClassicSettings (disk) — via ClassicSettings.Save()
+        SetManagedJsonSettingValue(propertyName, json);
+        PersistManagedJsonSetting(propertyName, json);
 
         if (_saveClassicSettingsChanges)
             ClassicSettings.Save();
@@ -400,32 +364,72 @@ internal class SettingsService : IDisposable
 
     private string ReadManagedJsonSettingText(string propertyName)
     {
-        string filePath = GetManagedJsonSettingFilePath(propertyName);
-        if (File.Exists(filePath))
-        {
-            try
-            {
-                return File.ReadAllText(filePath);
-            }
-            catch (IOException ex)
-            {
-                Debug.WriteLine($"Failed to read managed setting file '{propertyName}': {ex.Message}");
-            }
-        }
+        string classicValue = ClassicSettings[propertyName] as string ?? string.Empty;
+        string fileValue = TryReadManagedJsonSettingText(propertyName);
+        string preferredValue = _preferFileBackedManagedSettings ? fileValue : classicValue;
+        string secondaryValue = _preferFileBackedManagedSettings ? classicValue : fileValue;
+        string selectedValue = string.IsNullOrWhiteSpace(preferredValue)
+            ? secondaryValue
+            : preferredValue;
 
-        string managedJsonValue = ClassicSettings[propertyName] as string ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(managedJsonValue))
+        if (string.IsNullOrWhiteSpace(selectedValue))
             return string.Empty;
 
-        if (TryWriteManagedJsonSettingText(propertyName, managedJsonValue))
+        bool classicNeedsBackfill = !string.Equals(classicValue, selectedValue, StringComparison.Ordinal);
+        bool fileNeedsBackfill = !string.Equals(fileValue, selectedValue, StringComparison.Ordinal);
+
+        if (classicNeedsBackfill)
+            BackfillClassicManagedJsonSetting(propertyName, selectedValue);
+
+        if (fileNeedsBackfill)
+            TryWriteManagedJsonSettingText(propertyName, selectedValue);
+
+        return selectedValue;
+    }
+
+    private string TryReadManagedJsonSettingText(string propertyName)
+    {
+        string filePath = GetManagedJsonSettingFilePath(propertyName);
+        if (!File.Exists(filePath))
+            return string.Empty;
+
+        try
         {
-            ClearManagedJsonSetting(propertyName);
-
-            if (_saveClassicSettingsChanges)
-                ClassicSettings.Save();
+            return File.ReadAllText(filePath);
         }
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Failed to read managed setting file '{propertyName}': {ex.Message}");
+            return string.Empty;
+        }
+    }
 
-        return managedJsonValue;
+    private void BackfillClassicManagedJsonSetting(string propertyName, string value)
+    {
+        SetManagedJsonSettingValue(propertyName, value);
+        SaveSettingInContainer(propertyName, value);
+
+        if (_saveClassicSettingsChanges)
+            ClassicSettings.Save();
+    }
+
+    /// <summary>
+    /// Reads the best available value for a managed JSON setting without writing
+    /// back to either store. Safe to call during export so that existing settings
+    /// are never mutated as a side effect.
+    /// </summary>
+    private string ReadManagedJsonSettingTextForExport(string propertyName)
+    {
+        string classicValue = ClassicSettings[propertyName] as string ?? string.Empty;
+        string fileValue = TryReadManagedJsonSettingText(propertyName);
+        string preferredValue = _preferFileBackedManagedSettings ? fileValue : classicValue;
+        string secondaryValue = _preferFileBackedManagedSettings ? classicValue : fileValue;
+
+        string selectedValue = string.IsNullOrWhiteSpace(preferredValue)
+            ? secondaryValue
+            : preferredValue;
+
+        return selectedValue ?? string.Empty;
     }
 
     private bool TryWriteManagedJsonSettingText(string propertyName, string value)
@@ -459,12 +463,6 @@ internal class SettingsService : IDisposable
         }
     }
 
-    private void ClearManagedJsonSetting(string propertyName)
-    {
-        SetManagedJsonSettingValue(propertyName, string.Empty);
-        RemoveSettingFromContainer(propertyName);
-    }
-
     private void SetManagedJsonSettingValue(string propertyName, string value)
     {
         _suppressManagedJsonPropertyChanged = true;
@@ -475,21 +473,6 @@ internal class SettingsService : IDisposable
         finally
         {
             _suppressManagedJsonPropertyChanged = false;
-        }
-    }
-
-    private void RemoveSettingFromContainer(string name)
-    {
-        if (_localSettings is null)
-            return;
-
-        try
-        {
-            _localSettings.Values.Remove(name);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to remove setting from ApplicationDataContainer: {ex.Message}");
         }
     }
 

@@ -1,11 +1,14 @@
+using System;
 using System.IO;
 using System.Text.Json;
 using Text_Grab.Models;
+using Text_Grab.Properties;
 using Text_Grab.Services;
 using Text_Grab.Utilities;
 
 namespace Tests;
 
+[Collection("Settings isolation")]
 public class SettingsImportExportTests
 {
     [WpfFact]
@@ -315,6 +318,82 @@ public class SettingsImportExportTests
                 File.Delete(legacyZipPath);
             if (Directory.Exists(legacyDir))
                 Directory.Delete(legacyDir, true);
+        }
+    }
+
+    [WpfFact]
+    public async Task ExportImportRoundTripsGrabTemplatesAndTemplateImages()
+    {
+        string tempTemplateFile = Path.Combine(Path.GetTempPath(), $"GrabTemplates_Export_{Guid.NewGuid():N}.json");
+        string tempImagesFolder = Path.Combine(Path.GetTempPath(), $"GrabTemplates_Images_{Guid.NewGuid():N}");
+        string zipPath = string.Empty;
+        string originalGrabTemplatesJson = Settings.Default.GrabTemplatesJSON;
+        string? originalTestFilePath = GrabTemplateManager.TestFilePath;
+        string? originalTestImagesFolderPath = GrabTemplateManager.TestImagesFolderPath;
+        bool? originalTestPreferFileBackedMode = GrabTemplateManager.TestPreferFileBackedMode;
+
+        GrabTemplateManager.TestFilePath = tempTemplateFile;
+        GrabTemplateManager.TestImagesFolderPath = tempImagesFolder;
+        GrabTemplateManager.TestPreferFileBackedMode = false;
+
+        try
+        {
+            Directory.CreateDirectory(tempImagesFolder);
+
+            string referenceImagePath = Path.Combine(tempImagesFolder, "reference.png");
+            await File.WriteAllBytesAsync(referenceImagePath, [1, 2, 3, 4]);
+
+            GrabTemplate template = new()
+            {
+                Id = "template-export-1",
+                Name = "Invoice Template",
+                OutputTemplate = "{1}",
+                SourceImagePath = referenceImagePath,
+                Regions =
+                [
+                    new TemplateRegion
+                    {
+                        RegionNumber = 1,
+                        Label = "Amount",
+                        RatioLeft = 0.1,
+                        RatioTop = 0.1,
+                        RatioWidth = 0.3,
+                        RatioHeight = 0.1,
+                    }
+                ]
+            };
+
+            GrabTemplateManager.SaveTemplates([template]);
+
+            zipPath = await SettingsImportExportUtilities.ExportSettingsToZipAsync(includeHistory: false);
+
+            GrabTemplateManager.SaveTemplates([]);
+
+            if (File.Exists(referenceImagePath))
+                File.Delete(referenceImagePath);
+
+            await SettingsImportExportUtilities.ImportSettingsFromZipAsync(zipPath);
+
+            GrabTemplate restoredTemplate = Assert.Single(GrabTemplateManager.GetAllTemplates());
+            Assert.Equal(template.Id, restoredTemplate.Id);
+            Assert.Equal(template.Name, restoredTemplate.Name);
+            Assert.Contains(template.Id, Settings.Default.GrabTemplatesJSON);
+            Assert.True(File.Exists(referenceImagePath));
+        }
+        finally
+        {
+            GrabTemplateManager.TestFilePath = originalTestFilePath;
+            GrabTemplateManager.TestImagesFolderPath = originalTestImagesFolderPath;
+            GrabTemplateManager.TestPreferFileBackedMode = originalTestPreferFileBackedMode;
+            Settings.Default.GrabTemplatesJSON = originalGrabTemplatesJson;
+            Settings.Default.Save();
+
+            if (File.Exists(zipPath))
+                File.Delete(zipPath);
+            if (File.Exists(tempTemplateFile))
+                File.Delete(tempTemplateFile);
+            if (Directory.Exists(tempImagesFolder))
+                Directory.Delete(tempImagesFolder, true);
         }
     }
 }

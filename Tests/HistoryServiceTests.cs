@@ -94,7 +94,7 @@ public class HistoryServiceTests
     }
 
     [WpfFact]
-    public async Task ImageHistory_MigratesInlineWordBorderJsonToSidecarStorage()
+    public async Task ImageHistory_KeepsInlineWordBorderJsonWhileMirroringSidecarStorage()
     {
         string inlineWordBorderJson = JsonSerializer.Serialize(
             new List<WordBorderInfo>
@@ -127,7 +127,7 @@ public class HistoryServiceTests
         HistoryService historyService = new();
         HistoryInfo historyItem = Assert.Single(historyService.GetRecentGrabs());
 
-        Assert.Null(historyItem.WordBorderInfoJson);
+        Assert.Equal(inlineWordBorderJson, historyItem.WordBorderInfoJson);
         Assert.Equal("image-with-borders.wordborders.json", historyItem.WordBorderInfoFileName);
 
         List<WordBorderInfo> wordBorderInfos = await historyService.GetWordBorderInfosAsync(historyItem);
@@ -139,11 +139,46 @@ public class HistoryServiceTests
         historyService.ReleaseLoadedHistories();
 
         string savedHistoryJson = await FileUtilities.GetTextFileAsync("HistoryWithImage.json", FileStorageKind.WithHistory);
-        Assert.DoesNotContain("\"WordBorderInfoJson\"", savedHistoryJson);
+        Assert.Contains("\"WordBorderInfoJson\"", savedHistoryJson);
         Assert.Contains("\"WordBorderInfoFileName\"", savedHistoryJson);
 
         string savedWordBorderJson = await FileUtilities.GetTextFileAsync(historyItem.WordBorderInfoFileName!, FileStorageKind.WithHistory);
         Assert.Contains("hello", savedWordBorderJson);
+    }
+
+    [WpfFact]
+    public async Task ImageHistory_NormalizesPreviewUiAutomationEntriesToRollbackSafeValues()
+    {
+        await SaveHistoryFileAsync(
+            "HistoryWithImage.json",
+            [
+                new HistoryInfo
+                {
+                    ID = "uia-preview",
+                    CaptureDateTime = new DateTimeOffset(2024, 1, 4, 12, 0, 0, TimeSpan.Zero),
+                    TextContent = "direct text history",
+                    ImagePath = "uia.bmp",
+                    SourceMode = TextGrabMode.Fullscreen,
+                    LanguageTag = UiAutomationLang.Tag,
+                    LanguageKind = LanguageKind.UiAutomation,
+                }
+            ]);
+
+        HistoryService historyService = new();
+        HistoryInfo historyItem = Assert.Single(historyService.GetRecentGrabs());
+
+        Assert.True(historyItem.UsedUiAutomation);
+        Assert.Equal(LanguageKind.Global, historyItem.LanguageKind);
+        Assert.NotEqual(UiAutomationLang.Tag, historyItem.LanguageTag);
+        Assert.IsNotType<UiAutomationLang>(historyItem.OcrLanguage);
+
+        historyService.WriteHistory();
+        historyService.ReleaseLoadedHistories();
+
+        string savedHistoryJson = await FileUtilities.GetTextFileAsync("HistoryWithImage.json", FileStorageKind.WithHistory);
+        Assert.DoesNotContain("\"LanguageKind\": \"UiAutomation\"", savedHistoryJson);
+        Assert.DoesNotContain($"\"LanguageTag\": \"{UiAutomationLang.Tag}\"", savedHistoryJson);
+        Assert.Contains("\"UsedUiAutomation\": true", savedHistoryJson);
     }
 
     private static Task<bool> SaveHistoryFileAsync(string fileName, List<HistoryInfo> historyItems)

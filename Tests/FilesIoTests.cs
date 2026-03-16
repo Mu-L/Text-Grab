@@ -1,5 +1,6 @@
 ﻿using System.Drawing;
 using Text_Grab;
+using Text_Grab.Models;
 using Text_Grab.Utilities;
 
 namespace Tests;
@@ -16,6 +17,35 @@ public class FilesIoTests
 
         bool couldSave = await FileUtilities.SaveImageFile(fontSampleBitmap, "newTest.png", FileStorageKind.WithHistory);
 
+        Assert.True(couldSave);
+    }
+
+    [WpfFact]
+    public async Task SaveImageFile_SucceedsAfterClearTransientImage()
+    {
+        // Reproduces the race condition: SaveImageFile returns a Task that
+        // may still be running when ClearTransientImage nulls the bitmap.
+        // The save must complete successfully even when ClearTransientImage
+        // is called immediately after the fire-and-forget pattern used by
+        // HistoryService.SaveToHistory.
+        string path = FileUtilities.GetPathToLocalFile(fontSamplePath);
+        Bitmap bitmap = new(path);
+
+        HistoryInfo historyInfo = new()
+        {
+            ID = "save-race-test",
+            ImageContent = bitmap,
+            ImagePath = $"race_test_{Guid.NewGuid()}.bmp",
+        };
+
+        Task<bool> saveTask = FileUtilities.SaveImageFile(
+            historyInfo.ImageContent, historyInfo.ImagePath, FileStorageKind.WithHistory);
+
+        // Mirrors what HistoryService.SaveToHistory does right after the
+        // fire-and-forget call — must not cause saveTask to fail.
+        historyInfo.ClearTransientImage();
+
+        bool couldSave = await saveTask;
         Assert.True(couldSave);
     }
 

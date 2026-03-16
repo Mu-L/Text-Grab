@@ -23,73 +23,132 @@ public class SettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public void LoadStoredRegexes_MigratesAndCachesRegexSetting()
+    public void LoadStoredRegexes_DefaultModePrefersLegacyAndKeepsLegacyPopulated()
     {
-        Settings settings = new();
-        settings.RegexList = JsonSerializer.Serialize(new[]
+        Settings settings = new()
         {
-            new StoredRegex
-            {
-                Id = "regex-1",
-                Name = "Invoice Number",
-                Pattern = @"INV-\d+",
-                Description = "test pattern"
-            }
-        });
-
-        SettingsService service = new(
-            settings,
-            localSettings: null,
-            managedJsonSettingsFolderPath: _tempFolder,
-            saveClassicSettingsChanges: false);
-
-        Assert.Equal(string.Empty, settings.RegexList);
-
-        StoredRegex[] firstRead = service.LoadStoredRegexes();
+            EnableFileBackedManagedSettings = false,
+            RegexList = SerializeRegexes("legacy-regex")
+        };
         string regexFilePath = Path.Combine(_tempFolder, "RegexList.json");
+        File.WriteAllText(regexFilePath, SerializeRegexes("sidecar-regex"));
 
-        Assert.True(File.Exists(regexFilePath));
+        SettingsService service = CreateService(settings);
 
-        File.WriteAllText(
-            regexFilePath,
-            JsonSerializer.Serialize(new[]
-            {
-                new StoredRegex
-                {
-                    Id = "regex-2",
-                    Name = "Changed",
-                    Pattern = "changed"
-                }
-            }));
+        StoredRegex loadedRegex = Assert.Single(service.LoadStoredRegexes());
 
-        StoredRegex[] secondRead = service.LoadStoredRegexes();
-
-        StoredRegex initialPattern = Assert.Single(firstRead);
-        StoredRegex cachedPattern = Assert.Single(secondRead);
-        Assert.Equal("regex-1", initialPattern.Id);
-        Assert.Equal("regex-1", cachedPattern.Id);
+        Assert.Equal("legacy-regex", loadedRegex.Id);
+        Assert.Contains("legacy-regex", settings.RegexList);
+        Assert.Contains("legacy-regex", File.ReadAllText(regexFilePath));
     }
 
     [Fact]
-    public void SavePostGrabCheckStates_WritesFileAndLeavesClassicSettingEmpty()
+    public void LoadStoredRegexes_DefaultModeBackfillsLegacyFromSidecarWhenNeeded()
     {
-        Settings settings = new();
-        SettingsService service = new(
-            settings,
-            localSettings: null,
-            managedJsonSettingsFolderPath: _tempFolder,
-            saveClassicSettingsChanges: false);
+        Settings settings = new()
+        {
+            EnableFileBackedManagedSettings = false,
+            RegexList = string.Empty
+        };
+        string regexFilePath = Path.Combine(_tempFolder, "RegexList.json");
+        File.WriteAllText(regexFilePath, SerializeRegexes("recovered-regex"));
+
+        SettingsService service = CreateService(settings);
+
+        StoredRegex loadedRegex = Assert.Single(service.LoadStoredRegexes());
+
+        Assert.Equal("recovered-regex", loadedRegex.Id);
+        Assert.Contains("recovered-regex", settings.RegexList);
+        Assert.Equal(File.ReadAllText(regexFilePath), settings.RegexList);
+    }
+
+    [Fact]
+    public void LoadStoredRegexes_FileBackedModePrefersSidecarAndBackfillsLegacy()
+    {
+        Settings settings = new()
+        {
+            EnableFileBackedManagedSettings = true,
+            RegexList = SerializeRegexes("legacy-regex")
+        };
+        string regexFilePath = Path.Combine(_tempFolder, "RegexList.json");
+        File.WriteAllText(regexFilePath, SerializeRegexes("sidecar-regex"));
+
+        SettingsService service = CreateService(settings);
+
+        StoredRegex loadedRegex = Assert.Single(service.LoadStoredRegexes());
+
+        Assert.Equal("sidecar-regex", loadedRegex.Id);
+        Assert.Contains("sidecar-regex", settings.RegexList);
+        Assert.Contains("sidecar-regex", File.ReadAllText(regexFilePath));
+    }
+
+    [Fact]
+    public void SavePostGrabCheckStates_FileBackedModeWritesBothStores()
+    {
+        Settings settings = new()
+        {
+            EnableFileBackedManagedSettings = true
+        };
+        SettingsService service = CreateService(settings);
 
         service.SavePostGrabCheckStates(new Dictionary<string, bool>
         {
             ["Fix GUIDs"] = true
         });
 
-        Assert.Equal(string.Empty, settings.PostGrabCheckStates);
-        Assert.True(File.Exists(Path.Combine(_tempFolder, "PostGrabCheckStates.json")));
+        string filePath = Path.Combine(_tempFolder, "PostGrabCheckStates.json");
+        Assert.Contains("Fix GUIDs", settings.PostGrabCheckStates);
+        Assert.True(File.Exists(filePath));
+        Assert.Contains("Fix GUIDs", File.ReadAllText(filePath));
         Assert.True(service.LoadPostGrabCheckStates()["Fix GUIDs"]);
-        Assert.Contains(
-            "Fix GUIDs",
-            service.GetManagedJsonSettingValueForExport(nameof(Settings.PostGrabCheckStates)));
     }
+
+    [Fact]
+    public void ClearingManagedSettingClearsLegacyAndSidecar()
+    {
+        Settings settings = new()
+        {
+            EnableFileBackedManagedSettings = false
+        };
+        SettingsService service = CreateService(settings);
+
+        service.SaveStoredRegexes(
+        [
+            new StoredRegex
+            {
+                Id = "clear-me",
+                Name = "Clear Me",
+                Pattern = ".*"
+            }
+        ]);
+
+        string regexFilePath = Path.Combine(_tempFolder, "RegexList.json");
+        Assert.NotEmpty(settings.RegexList);
+        Assert.True(File.Exists(regexFilePath));
+
+        settings.RegexList = string.Empty;
+
+        Assert.Equal(string.Empty, settings.RegexList);
+        Assert.False(File.Exists(regexFilePath));
+        Assert.Empty(service.LoadStoredRegexes());
+    }
+
+    private SettingsService CreateService(Settings settings) =>
+        new(
+            settings,
+            localSettings: null,
+            managedJsonSettingsFolderPath: _tempFolder,
+            saveClassicSettingsChanges: false);
+
+    private static string SerializeRegexes(string id) =>
+        JsonSerializer.Serialize(new[]
+        {
+            new StoredRegex
+            {
+                Id = id,
+                Name = $"{id} name",
+                Pattern = @"INV-\d+",
+                Description = "transition test pattern"
+            }
+        });
 }

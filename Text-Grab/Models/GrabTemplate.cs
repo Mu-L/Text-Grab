@@ -87,12 +87,10 @@ public partial class GrabTemplate
 
     /// <summary>
     /// Returns whether this template has the minimum required data to be executed.
-    /// A template is valid if it has a name, an output template, and at least one
-    /// region or pattern reference.
+    /// A template is valid if it has a name and an output template.
     /// </summary>
     public bool IsValid =>
         !string.IsNullOrWhiteSpace(Name)
-        && (Regions.Count > 0 || PatternMatches.Count > 0)
         && !string.IsNullOrWhiteSpace(OutputTemplate);
 
     /// <summary>

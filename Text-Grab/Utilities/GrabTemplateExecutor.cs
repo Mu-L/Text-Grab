@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -77,8 +78,15 @@ public static class GrabTemplateExecutor
             : [];
 
         // 2. OCR full capture area for pattern matching (if any pattern references exist)
+        // Also check if output template has {p:...} placeholders in case PatternMatches wasn't populated on save
+        bool hasPatternRefs = template.PatternMatches.Count > 0
+            || PatternPlaceholderRegex.IsMatch(template.OutputTemplate);
+        List<TemplatePatternMatch> effectivePatternMatches = template.PatternMatches.Count > 0
+            ? template.PatternMatches
+            : (hasPatternRefs ? ParsePatternMatchesFromOutputTemplate(template.OutputTemplate) : []);
+
         string? fullAreaText = null;
-        if (template.PatternMatches.Count > 0)
+        if (hasPatternRefs)
         {
             try
             {
@@ -92,14 +100,105 @@ public static class GrabTemplateExecutor
 
         // 3. Resolve pattern regexes from saved patterns
         Dictionary<string, string> patternRegexes = [];
-        if (template.PatternMatches.Count > 0)
-            patternRegexes = ResolvePatternRegexes(template.PatternMatches);
+        if (effectivePatternMatches.Count > 0)
+            patternRegexes = ResolvePatternRegexes(effectivePatternMatches);
 
         // 4. Apply output template
         string output = ApplyOutputTemplate(template.OutputTemplate, regionResults);
 
         if (fullAreaText != null)
-            output = ApplyPatternPlaceholders(output, fullAreaText, template.PatternMatches, patternRegexes);
+            output = ApplyPatternPlaceholders(output, fullAreaText, effectivePatternMatches, patternRegexes);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Executes the given template against a file-loaded <paramref name="bitmap"/>.
+    /// Each template region is mapped to a cropped sub-bitmap, OCR'd, then
+    /// assembled via the output template.
+    /// </summary>
+    public static async Task<string> ExecuteTemplateOnBitmapAsync(
+        GrabTemplate template,
+        Bitmap bitmap,
+        ILanguage? language = null)
+    {
+        if (!template.IsValid)
+            return string.Empty;
+
+        ILanguage resolvedLanguage = language ?? LanguageUtilities.GetOCRLanguage();
+
+        // 1. OCR each region (if any)
+        Dictionary<int, string> regionResults = [];
+        if (template.Regions.Count > 0)
+        {
+            foreach (TemplateRegion region in template.Regions)
+            {
+                int x = (int)(region.RatioLeft * bitmap.Width);
+                int y = (int)(region.RatioTop * bitmap.Height);
+                int width = (int)(region.RatioWidth * bitmap.Width);
+                int height = (int)(region.RatioHeight * bitmap.Height);
+
+                if (width <= 0 || height <= 0)
+                {
+                    regionResults[region.RegionNumber] = region.DefaultValue;
+                    continue;
+                }
+
+                // Clamp to bitmap bounds
+                x = Math.Max(0, Math.Min(x, bitmap.Width - 1));
+                y = Math.Max(0, Math.Min(y, bitmap.Height - 1));
+                width = Math.Min(width, bitmap.Width - x);
+                height = Math.Min(height, bitmap.Height - y);
+
+                try
+                {
+                    using Bitmap regionBitmap = bitmap.Clone(
+                        new Rectangle(x, y, width, height), bitmap.PixelFormat);
+                    string regionText = OcrUtilities.GetStringFromOcrOutputs(
+                        await OcrUtilities.GetTextFromImageAsync(regionBitmap, resolvedLanguage));
+                    regionResults[region.RegionNumber] = string.IsNullOrWhiteSpace(regionText)
+                        ? region.DefaultValue
+                        : regionText.Trim();
+                }
+                catch (Exception)
+                {
+                    regionResults[region.RegionNumber] = region.DefaultValue;
+                }
+            }
+        }
+
+        // 2. OCR full bitmap for pattern matching (if any)
+        // Also check if output template has {p:...} placeholders in case PatternMatches wasn't populated on save
+        bool hasPatternRefs = template.PatternMatches.Count > 0
+            || PatternPlaceholderRegex.IsMatch(template.OutputTemplate);
+        List<TemplatePatternMatch> effectivePatternMatches = template.PatternMatches.Count > 0
+            ? template.PatternMatches
+            : (hasPatternRefs ? ParsePatternMatchesFromOutputTemplate(template.OutputTemplate) : []);
+
+        string? fullAreaText = null;
+        if (hasPatternRefs)
+        {
+            try
+            {
+                fullAreaText = OcrUtilities.GetStringFromOcrOutputs(
+                    await OcrUtilities.GetTextFromImageAsync(bitmap, resolvedLanguage));
+            }
+            catch (Exception)
+            {
+                fullAreaText = string.Empty;
+            }
+        }
+
+        // 3. Resolve pattern regexes
+        Dictionary<string, string> patternRegexes = [];
+        if (effectivePatternMatches.Count > 0)
+            patternRegexes = ResolvePatternRegexes(effectivePatternMatches);
+
+        // 4. Apply output template
+        string output = ApplyOutputTemplate(template.OutputTemplate, regionResults);
+
+        if (fullAreaText != null)
+            output = ApplyPatternPlaceholders(output, fullAreaText, effectivePatternMatches, patternRegexes);
 
         return output;
     }
@@ -278,6 +377,43 @@ public static class GrabTemplateExecutor
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Parses <c>{p:Name:mode}</c> and <c>{p:Name:mode:separator}</c> placeholders from
+    /// <paramref name="outputTemplate"/> and builds <see cref="TemplatePatternMatch"/> objects
+    /// by resolving against saved patterns. Useful when a template was saved without populating
+    /// <see cref="GrabTemplate.PatternMatches"/> (e.g. via the text-only template dialog).
+    /// </summary>
+    public static List<TemplatePatternMatch> ParsePatternMatchesFromOutputTemplate(string outputTemplate)
+    {
+        if (string.IsNullOrEmpty(outputTemplate))
+            return [];
+
+        MatchCollection matches = PatternPlaceholderRegex.Matches(outputTemplate);
+        Dictionary<string, TemplatePatternMatch> uniquePatterns = new(StringComparer.OrdinalIgnoreCase);
+        StoredRegex[] savedPatterns = LoadSavedPatterns();
+
+        foreach (Match match in matches)
+        {
+            string patternName = match.Groups[1].Value;
+            string mode = match.Groups[2].Value;
+            string separator = match.Groups[3].Success ? match.Groups[3].Value : ", ";
+
+            if (uniquePatterns.ContainsKey(patternName))
+                continue;
+
+            StoredRegex? stored = savedPatterns.FirstOrDefault(
+                p => p.Name.Equals(patternName, StringComparison.OrdinalIgnoreCase));
+
+            uniquePatterns[patternName] = new TemplatePatternMatch(
+                patternId: stored?.Id ?? string.Empty,
+                patternName: patternName,
+                matchMode: mode,
+                separator: separator);
+        }
+
+        return [.. uniquePatterns.Values];
     }
 
     private static StoredRegex[] LoadSavedPatterns()

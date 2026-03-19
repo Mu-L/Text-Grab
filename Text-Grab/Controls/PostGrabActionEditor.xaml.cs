@@ -85,6 +85,11 @@ public partial class PostGrabActionEditor : FluentWindow
 
     #region Methods
 
+    private void TemplateInfoButton_Click(object sender, RoutedEventArgs e)
+    {
+        TemplateInfoPopup.IsOpen = !TemplateInfoPopup.IsOpen;
+    }
+
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
         if (AvailableActionsListBox.SelectedItem is not ButtonInfo selectedAction)
@@ -138,15 +143,17 @@ public partial class PostGrabActionEditor : FluentWindow
         EnabledActionsListBox.SelectedIndex = index + 1;
     }
 
-    private void ResetButton_Click(object sender, RoutedEventArgs e)
+    private async void ResetButton_Click(object sender, RoutedEventArgs e)
     {
-        System.Windows.MessageBoxResult result = System.Windows.MessageBox.Show(
-                "This will reset to the default post-grab actions. Continue?",
-                "Reset to Defaults",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Question);
+        Wpf.Ui.Controls.MessageBoxResult result = await new Wpf.Ui.Controls.MessageBox
+        {
+            Title = "Reset to Defaults",
+            Content = "This will reset to the default post-grab actions. Continue?",
+            PrimaryButtonText = "Yes",
+            CloseButtonText = "No"
+        }.ShowDialogAsync();
 
-        if (result != System.Windows.MessageBoxResult.Yes)
+        if (result != Wpf.Ui.Controls.MessageBoxResult.Primary)
             return;
 
         // Get defaults
@@ -219,6 +226,17 @@ public partial class PostGrabActionEditor : FluentWindow
         NoTemplatesText.Visibility = hasTemplates ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    private void NewTextOnlyTemplateButton_Click(object sender, RoutedEventArgs e)
+    {
+        TextOnlyTemplateDialog dialog = new()
+        {
+            Owner = this,
+        };
+
+        if (dialog.ShowDialog() is true)
+            RefreshTemplatesAndActions();
+    }
+
     private void NewTemplateFromImageButton_Click(object sender, RoutedEventArgs e)
     {
         Microsoft.Win32.OpenFileDialog dlg = new()
@@ -245,15 +263,32 @@ public partial class PostGrabActionEditor : FluentWindow
         grabFrame.Activate();
     }
 
-    private void EditTemplateRegionsButton_Click(object sender, RoutedEventArgs e)
+    private async void EditTemplateRegionsButton_Click(object sender, RoutedEventArgs e)
     {
         if (TemplatesListBox.SelectedItem is not GrabTemplate selected)
         {
-            System.Windows.MessageBox.Show(
-                "Select a template from the list first.",
-                "No Template Selected",
-                System.Windows.MessageBoxButton.OK,
-                System.Windows.MessageBoxImage.Information);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "No Template Selected",
+                Content = "Select a template from the list first.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(selected.SourceImagePath))
+        {
+            TextOnlyTemplateDialog dialog = new()
+            {
+                Owner = this,
+            };
+            dialog.TemplateNameBox.Text = selected.Name;
+            dialog.OutputTemplateBox.SetSerializedText(selected.OutputTemplate);
+            dialog.EditingTemplate = selected;
+
+            if (dialog.ShowDialog() is true)
+                RefreshTemplatesAndActions();
+
             return;
         }
 
@@ -263,18 +298,20 @@ public partial class PostGrabActionEditor : FluentWindow
         grabFrame.Activate();
     }
 
-    private void DeleteTemplateButton_Click(object sender, RoutedEventArgs e)
+    private async void DeleteTemplateButton_Click(object sender, RoutedEventArgs e)
     {
         if (TemplatesListBox.SelectedItem is not GrabTemplate selected)
             return;
 
-        System.Windows.MessageBoxResult result = System.Windows.MessageBox.Show(
-            $"Delete template '{selected.Name}'?",
-            "Delete Template",
-            System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Question);
+        Wpf.Ui.Controls.MessageBoxResult result = await new Wpf.Ui.Controls.MessageBox
+        {
+            Title = "Delete Template",
+            Content = $"Delete template '{selected.Name}'?",
+            PrimaryButtonText = "Yes",
+            CloseButtonText = "No"
+        }.ShowDialogAsync();
 
-        if (result != System.Windows.MessageBoxResult.Yes)
+        if (result != Wpf.Ui.Controls.MessageBoxResult.Primary)
             return;
 
         GrabTemplateManager.DeleteTemplate(selected.Id);
@@ -345,6 +382,7 @@ public partial class PostGrabActionEditor : FluentWindow
 
         _editingTemplate.Name = newName;
         _editingTemplate.OutputTemplate = EditOutputTemplateBox.Text;
+        _editingTemplate.PatternMatches = GrabTemplateExecutor.ParsePatternMatchesFromOutputTemplate(_editingTemplate.OutputTemplate);
         GrabTemplateManager.AddOrUpdateTemplate(_editingTemplate);
 
         _editingTemplate = null;

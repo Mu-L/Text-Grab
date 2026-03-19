@@ -218,9 +218,17 @@ public class GrabTemplateManagerTests : IDisposable
     }
 
     [Fact]
-    public void GrabTemplate_IsValid_TrueWhenNameRegionsAndOutputTemplateSet()
+    public void GrabTemplate_IsValid_TrueWhenNameAndOutputTemplateSet()
     {
         GrabTemplate template = CreateSampleTemplate("Valid");
+        Assert.True(template.IsValid);
+    }
+
+    [Fact]
+    public void GrabTemplate_IsValid_TrueWhenNoRegionsButHasNameAndOutputTemplate()
+    {
+        GrabTemplate template = CreateSampleTemplate("Text Only");
+        template.Regions.Clear();
         Assert.True(template.IsValid);
     }
 
@@ -232,10 +240,10 @@ public class GrabTemplateManagerTests : IDisposable
     }
 
     [Fact]
-    public void GrabTemplate_IsValid_FalseWhenNoRegions()
+    public void GrabTemplate_IsValid_FalseWhenOutputTemplateEmpty()
     {
-        GrabTemplate template = CreateSampleTemplate("No Regions");
-        template.Regions.Clear();
+        GrabTemplate template = CreateSampleTemplate("No Output");
+        template.OutputTemplate = string.Empty;
         Assert.False(template.IsValid);
     }
 

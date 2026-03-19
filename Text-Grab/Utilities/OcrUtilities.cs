@@ -273,7 +273,7 @@ public static partial class OcrUtilities
         if (lastFsg is null)
             return;
 
-        if (!CanReplayPreviousFullscreenSelection(lastFsg))
+        if (!await CanReplayPreviousFullscreenSelection(lastFsg))
             return;
 
         Rect scaledRect = lastFsg.PositionRect.GetScaledUpByFraction(lastFsg.DpiScaleFactor);
@@ -312,7 +312,7 @@ public static partial class OcrUtilities
         if (lastFsg is null)
             return;
 
-        if (!CanReplayPreviousFullscreenSelection(lastFsg))
+        if (!await CanReplayPreviousFullscreenSelection(lastFsg))
             return;
 
         Rect scaledRect = lastFsg.PositionRect.GetScaledUpByFraction(lastFsg.DpiScaleFactor);
@@ -454,8 +454,14 @@ public static partial class OcrUtilities
 
     public static async Task<string> OcrAbsoluteFilePathAsync(string absolutePath, ILanguage? language = null)
     {
+        Bitmap bmp = LoadBitmapFromFile(absolutePath);
+        language ??= LanguageUtilities.GetCurrentInputLanguage();
+        return GetStringFromOcrOutputs(await GetTextFromImageAsync(bmp, language));
+    }
+
+    private static Bitmap LoadBitmapFromFile(string absolutePath)
+    {
         Uri fileURI = new(absolutePath, UriKind.Absolute);
-        FileInfo fileInfo = new(fileURI.LocalPath);
         RotateFlipType rotateFlipType = ImageMethods.GetRotateFlipType(absolutePath);
         BitmapImage droppedImage = new();
         droppedImage.BeginInit();
@@ -464,9 +470,7 @@ public static partial class OcrUtilities
         droppedImage.CacheOption = BitmapCacheOption.None;
         droppedImage.EndInit();
         droppedImage.Freeze();
-        Bitmap bmp = ImageMethods.BitmapImageToBitmap(droppedImage);
-        language ??= LanguageUtilities.GetCurrentInputLanguage();
-        return GetStringFromOcrOutputs(await GetTextFromImageAsync(bmp, language));
+        return ImageMethods.BitmapImageToBitmap(droppedImage);
     }
 
     public static async Task<string> GetClickedWordAsync(Window passedWindow, Point clickedPoint, ILanguage OcrLang)
@@ -564,7 +568,14 @@ public static partial class OcrUtilities
             returnString.AppendLine(Path.GetFileName(path));
         try
         {
-            string ocrText = await OcrAbsoluteFilePathAsync(path, selectedLanguage);
+            string ocrText;
+            if (options.GrabTemplate is GrabTemplate grabTemplate)
+            {
+                Bitmap bmp = LoadBitmapFromFile(path);
+                ocrText = await GrabTemplateExecutor.ExecuteTemplateOnBitmapAsync(grabTemplate, bmp, selectedLanguage);
+            }
+            else
+                ocrText = await OcrAbsoluteFilePathAsync(path, selectedLanguage);
 
             if (!string.IsNullOrWhiteSpace(ocrText))
             {
@@ -591,16 +602,17 @@ public static partial class OcrUtilities
     [GeneratedRegex(@"(^[\p{L}-[\p{Lo}]]|\p{Nd}$)|.{2,}")]
     private static partial Regex SpaceJoiningWordRegex();
 
-    private static bool CanReplayPreviousFullscreenSelection(HistoryInfo history)
+    private static async Task<bool> CanReplayPreviousFullscreenSelection(HistoryInfo history)
     {
         if (history.SelectionStyle is FsgSelectionStyle.Region or FsgSelectionStyle.AdjustAfter)
             return true;
 
-        MessageBox.Show(
-            "Repeat previous fullscreen capture is currently available only for Region and Adjust After selections.",
-            "Text Grab",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        await new Wpf.Ui.Controls.MessageBox
+        {
+            Title = "Text Grab",
+            Content = "Repeat previous fullscreen capture is currently available only for Region and Adjust After selections.",
+            CloseButtonText = "OK"
+        }.ShowDialogAsync();
         return false;
     }
 }

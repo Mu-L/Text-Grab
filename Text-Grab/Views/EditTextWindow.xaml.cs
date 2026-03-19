@@ -244,6 +244,9 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             }
         }
 
+        if (!CaptureLanguageUtilities.IsStaticImageCompatible(selectedLanguage))
+            selectedLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+
         if (options.OutputHeader)
         {
             PassedTextControl.AppendText(folderPath);
@@ -264,6 +267,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             {
                 PassedTextControl.AppendText(Environment.NewLine);
                 PassedTextControl.AppendText($"Using {selectedLanguage.DisplayName} from Windows.");
+                PassedTextControl.AppendText(Environment.NewLine);
+            }
+
+            if (options.GrabTemplate is GrabTemplate headerTemplate)
+            {
+                PassedTextControl.AppendText($"Using template: {headerTemplate.Name}");
                 PassedTextControl.AppendText(Environment.NewLine);
             }
 
@@ -625,6 +634,7 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
     private void CaptureMenuItem_SubmenuOpened(object sender, RoutedEventArgs e)
     {
         LoadLanguageMenuItems(LanguageMenuItem);
+        LoadGrabTemplateMenuItems(GrabTemplateMenuItem);
     }
 
     private void CheckForGrabFrameOrLaunch()
@@ -1191,6 +1201,50 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         clickedMenuItem.IsChecked = true;
     }
 
+    private void LoadGrabTemplateMenuItems(MenuItem grabTemplateMenuItem)
+    {
+        // Remember which template (if any) was previously selected
+        GrabTemplate? previouslySelected = grabTemplateMenuItem.Items
+            .OfType<MenuItem>()
+            .FirstOrDefault(m => m.IsChecked && m.Tag is GrabTemplate)
+            ?.Tag as GrabTemplate;
+
+        grabTemplateMenuItem.Items.Clear();
+
+        MenuItem noneItem = new()
+        {
+            Header = "(None)",
+            IsCheckable = true,
+            IsChecked = previouslySelected is null,
+        };
+        noneItem.Click += GrabTemplateMenuItem_Click;
+        grabTemplateMenuItem.Items.Add(noneItem);
+
+        foreach (GrabTemplate template in GrabTemplateManager.GetAllTemplates())
+        {
+            MenuItem templateMenuItem = new()
+            {
+                Header = template.Name,
+                IsCheckable = true,
+                IsChecked = previouslySelected?.Id == template.Id,
+                Tag = template,
+            };
+            templateMenuItem.Click += GrabTemplateMenuItem_Click;
+            grabTemplateMenuItem.Items.Add(templateMenuItem);
+        }
+    }
+
+    private void GrabTemplateMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem clickedItem)
+            return;
+
+        foreach (MenuItem item in GrabTemplateMenuItem.Items)
+            item.IsChecked = false;
+
+        clickedItem.IsChecked = true;
+    }
+
     private void LaunchFindAndReplace()
     {
         FindAndReplaceWindow findAndReplaceWindow = WindowUtilities.OpenOrActivateWindow<FindAndReplaceWindow>();
@@ -1259,6 +1313,7 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
 
         bool usingTesseract = DefaultSettings.UseTesseract && TesseractHelper.CanLocateTesseractExe();
         List<ILanguage> availableLanguages = await CaptureLanguageUtilities.GetCaptureLanguagesAsync(usingTesseract);
+        availableLanguages = availableLanguages.Where(CaptureLanguageUtilities.IsStaticImageCompatible).ToList();
         int selectedIndex = CaptureLanguageUtilities.FindPreferredLanguageIndex(
             availableLanguages,
             DefaultSettings.LastUsedLang,
@@ -1781,6 +1836,16 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
 
         string chosenFolderPath = folderBrowserDialog.SelectedPath;
 
+        GrabTemplate? selectedTemplate = null;
+        foreach (MenuItem item in GrabTemplateMenuItem.Items)
+        {
+            if (item.IsChecked && item.Tag is GrabTemplate grabTemplate)
+            {
+                selectedTemplate = grabTemplate;
+                break;
+            }
+        }
+
         OcrDirectoryOptions ocrDirectoryOptions = new()
         {
             Path = chosenFolderPath,
@@ -1788,7 +1853,8 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             WriteTxtFiles = ReadFolderOfImagesWriteTxtFiles.IsChecked is true,
             OutputFileNames = OutputFilenamesCheck.IsChecked is true,
             OutputFooter = OutputFooterCheck.IsChecked is true,
-            OutputHeader = OutputHeaderCheck.IsChecked is true
+            OutputHeader = OutputHeaderCheck.IsChecked is true,
+            GrabTemplate = selectedTemplate,
         };
 
         if (Directory.Exists(chosenFolderPath))
@@ -2162,13 +2228,18 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             e.CanExecute = true;
     }
 
-    private void SplitOnSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
+    private async void SplitOnSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
     {
         string selectedText = PassedTextControl.SelectedText;
 
         if (string.IsNullOrEmpty(selectedText))
         {
-            System.Windows.MessageBox.Show("No text selected", "Did not split lines");
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Did not split lines",
+                Content = "No text selected",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -2179,13 +2250,18 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         PassedTextControl.Text = textToManipulate.ToString();
     }
 
-    private void SplitAfterSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
+    private async void SplitAfterSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
     {
         string selectedText = PassedTextControl.SelectedText;
 
         if (string.IsNullOrEmpty(selectedText))
         {
-            System.Windows.MessageBox.Show("No text selected", "Did not split lines");
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Did not split lines",
+                Content = "No text selected",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -3346,8 +3422,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show($"Translation failed: {ex.Message}",
-                "Translation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Translation Error",
+                Content = $"Translation failed: {ex.Message}",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
         finally
         {
@@ -3361,8 +3441,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
 
         if (string.IsNullOrWhiteSpace(textDescription))
         {
-            System.Windows.MessageBox.Show("Please enter or select text to extract a regex pattern from.",
-                "No Text", MessageBoxButton.OK, MessageBoxImage.Information);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "No Text",
+                Content = "Please enter or select text to extract a regex pattern from.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -3376,8 +3460,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         catch (Exception ex)
         {
             Debug.WriteLine($"Regex extraction exception: {ex.Message}");
-            System.Windows.MessageBox.Show($"An error occurred while extracting regex: {ex.Message}",
-                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Error",
+                Content = $"An error occurred while extracting regex: {ex.Message}",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             SetToLoaded();
             return;
         }
@@ -3386,8 +3474,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
 
         if (string.IsNullOrWhiteSpace(regexPattern))
         {
-            System.Windows.MessageBox.Show("Failed to extract a regex pattern. The AI service may not be available or could not generate a pattern.",
-                "Extraction Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Extraction Failed",
+                Content = "Failed to extract a regex pattern. The AI service may not be available or could not generate a pattern.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -3428,8 +3520,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             catch (Exception ex)
             {
                 Debug.WriteLine($"Failed to copy regex to clipboard: {ex.Message}");
-                System.Windows.MessageBox.Show("Failed to copy regex pattern to clipboard.",
-                    "Copy Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                await new Wpf.Ui.Controls.MessageBox
+                {
+                    Title = "Copy Failed",
+                    Content = "Failed to copy regex pattern to clipboard.",
+                    CloseButtonText = "OK"
+                }.ShowDialogAsync();
             }
         }
     }

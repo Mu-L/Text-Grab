@@ -468,23 +468,12 @@ public partial class FullscreenGrab : Window
         contextMenu.PreviewKeyDown -= FullscreenGrab_KeyDown;
         contextMenu.PreviewKeyDown += FullscreenGrab_KeyDown;
 
-        List<ButtonInfo> regularActions = [.. enabledActions.Where(a => string.IsNullOrEmpty(a.TemplateId))];
-        List<ButtonInfo> templateActions = [.. enabledActions.Where(a => !string.IsNullOrEmpty(a.TemplateId))];
         bool templatePreselected = !string.IsNullOrEmpty(PreselectedTemplateId);
 
         int index = 1;
-        foreach (ButtonInfo action in regularActions)
+        foreach (ButtonInfo action in enabledActions)
         {
-            AddPostGrabActionMenuItem(contextMenu, action, PostGrabActionManager.GetCheckState(action), stayOpen, index);
-            index++;
-        }
-
-        if (regularActions.Count > 0 && templateActions.Count > 0)
-            contextMenu.Items.Add(new Separator());
-
-        foreach (ButtonInfo action in templateActions)
-        {
-            bool isChecked = templatePreselected
+            bool isChecked = !string.IsNullOrEmpty(action.TemplateId) && templatePreselected
                 ? action.TemplateId == PreselectedTemplateId
                 : PostGrabActionManager.GetCheckState(action);
 

@@ -1018,7 +1018,18 @@ public static class UIAutomationUtilities
         out UiAutomationOverlayItem overlayItem)
     {
         overlayItem = default!;
-        string text = NormalizeText(range.GetText(-1));
+
+        string rawText;
+        try
+        {
+            rawText = range.GetText(-1);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ElementNotAvailableException or System.Runtime.InteropServices.COMException)
+        {
+            return false;
+        }
+
+        string text = NormalizeText(rawText);
         if (string.IsNullOrWhiteSpace(text))
             return false;
 

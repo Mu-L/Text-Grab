@@ -55,6 +55,7 @@ public partial class GrabFrame : Window
     private ImageSource? frameContentImageSource;
     private HistoryInfo? historyItem;
     private readonly GrabTemplate? _editingTemplate;
+    private GrabTemplate? _activeGrabTemplate = null;
     private string? _currentImagePath;
     private bool hasLoadedImageSource = false;
     private bool IsDragOver = false;
@@ -196,7 +197,6 @@ public partial class GrabFrame : Window
     {
         TemplateNameBox.Text = template.Name;
 
-        SaveAsTemplateBTN.IsChecked = true;
         TemplateSavePanel.Visibility = Visibility.Visible;
 
         if (!string.IsNullOrEmpty(template.SourceImagePath) && File.Exists(template.SourceImagePath))
@@ -2693,7 +2693,7 @@ new GrabFrameOperationArgs()
         MatchesMenu.Visibility = Visibility.Visible;
         LanguagesComboBox.Visibility = Visibility.Collapsed;
 
-        if (SaveAsTemplateBTN.IsChecked == true)
+        if (TemplateSavePanel.Visibility == Visibility.Visible)
             UpdateTemplateBadges();
     }
 
@@ -2814,7 +2814,7 @@ new GrabFrameOperationArgs()
 
     private void SaveAsTemplate_Click(object sender, RoutedEventArgs e)
     {
-        bool show = SaveAsTemplateBTN.IsChecked == true;
+        bool show = TemplateSavePanel.Visibility != Visibility.Visible;
         TemplateSavePanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (show)
         {
@@ -2892,7 +2892,6 @@ new GrabFrameOperationArgs()
 
         GrabTemplateManager.AddOrUpdateTemplate(template);
 
-        SaveAsTemplateBTN.IsChecked = false;
         TemplateSavePanel.Visibility = Visibility.Collapsed;
         TemplateNameBox.Text = string.Empty;
         TemplateOutputBox.SetSerializedText(string.Empty);
@@ -2951,14 +2950,118 @@ new GrabFrameOperationArgs()
 
     private void SaveTemplateCancel_Click(object sender, RoutedEventArgs e)
     {
-        SaveAsTemplateBTN.IsChecked = false;
         TemplateSavePanel.Visibility = Visibility.Collapsed;
         UpdateTemplateBadges();
     }
 
+    private void TemplateContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu) return;
+        menu.Items.Clear();
+
+        MenuItem createItem = new() { Header = "Create new Grab Template..." };
+        createItem.Click += (_, _) =>
+        {
+            bool show = TemplateSavePanel.Visibility != Visibility.Visible;
+            TemplateSavePanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (show)
+            {
+                if (!IsFreezeMode) { FreezeToggleButton.IsChecked = true; FreezeGrabFrame(); }
+                TemplateNameBox.Focus();
+            }
+            UpdateTemplateBadges();
+        };
+        menu.Items.Add(createItem);
+
+        List<GrabTemplate> templates = GrabTemplateManager.GetAllTemplates();
+        if (templates.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+            foreach (GrabTemplate template in templates)
+            {
+                MenuItem item = new()
+                {
+                    Header = template.Name,
+                    IsCheckable = true,
+                    IsChecked = _activeGrabTemplate?.Id == template.Id,
+                    StaysOpenOnClick = false,
+                    Tag = template.Id,
+                };
+                item.Click += TemplateMenuItem_Click;
+                menu.Items.Add(item);
+            }
+        }
+    }
+
+    private void TemplateMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem item || item.Tag is not string templateId) return;
+
+        if (_activeGrabTemplate?.Id == templateId)
+        {
+            _activeGrabTemplate = null;
+        }
+        else
+        {
+            _activeGrabTemplate = GrabTemplateManager.GetTemplateById(templateId);
+        }
+
+        UpdateTemplateButtonHighlight();
+        UpdateTemplateRegionOverlay();
+    }
+
+    private void UpdateTemplateButtonHighlight()
+    {
+        TemplateMenuButton.Background = _activeGrabTemplate is not null
+            ? (System.Windows.Media.Brush)FindResource("AccentButtonBackground")
+            : System.Windows.Media.Brushes.Transparent;
+    }
+
+    private void UpdateTemplateRegionOverlay()
+    {
+        TemplateRegionOverlayCanvas.Children.Clear();
+
+        if (_activeGrabTemplate is null || _activeGrabTemplate.Regions.Count == 0)
+            return;
+
+        double canvasWidth = RectanglesCanvas.ActualWidth;
+        double canvasHeight = RectanglesCanvas.ActualHeight;
+        if (canvasWidth < 4 || canvasHeight < 4)
+            return;
+
+        HashSet<int> referencedRegions = [.. _activeGrabTemplate.GetReferencedRegionNumbers()];
+        if (referencedRegions.Count == 0 && _activeGrabTemplate.PatternMatches.Count > 0)
+            return;
+
+        System.Windows.Media.Color borderColor = System.Windows.Media.Color.FromArgb(220, 255, 180, 0);
+        System.Windows.Media.Color dimBorderColor = System.Windows.Media.Color.FromArgb(80, 255, 180, 0);
+
+        foreach (TemplateRegion region in _activeGrabTemplate.Regions)
+        {
+            double regionLeft = region.RatioLeft * canvasWidth;
+            double regionTop = region.RatioTop * canvasHeight;
+            double regionWidth = region.RatioWidth * canvasWidth;
+            double regionHeight = region.RatioHeight * canvasHeight;
+
+            if (regionWidth < 1 || regionHeight < 1) continue;
+
+            bool isReferenced = referencedRegions.Count == 0 || referencedRegions.Contains(region.RegionNumber);
+            Border regionBorder = new()
+            {
+                Width = regionWidth,
+                Height = regionHeight,
+                BorderBrush = new SolidColorBrush(isReferenced ? borderColor : dimBorderColor),
+                BorderThickness = new Thickness(1.5),
+            };
+            Canvas.SetLeft(regionBorder, regionLeft);
+            Canvas.SetTop(regionBorder, regionTop);
+            TemplateRegionOverlayCanvas.Children.Add(regionBorder);
+        }
+    }
+
     private void UpdateTemplateBadges()
     {
-        bool isTemplateMode = SaveAsTemplateBTN.IsChecked == true;
+        bool isTemplateMode = TemplateSavePanel.Visibility == Visibility.Visible;
 
         if (!isTemplateMode)
         {
@@ -2981,7 +3084,7 @@ new GrabFrameOperationArgs()
 
     private void UpdateTemplateRegionOpacities()
     {
-        if (SaveAsTemplateBTN.IsChecked != true)
+        if (TemplateSavePanel.Visibility != Visibility.Visible)
             return;
 
         string outputTemplate = TemplateOutputBox.GetSerializedText();
@@ -3273,10 +3376,13 @@ new GrabFrameOperationArgs()
         if (IsFromEditWindow
             && destinationTextBox is not null
             && AlwaysUpdateEtwCheckBox.IsChecked is true
-            && EditTextToggleButton.IsChecked is true)
+            && EditTextToggleButton.IsChecked is true
+            && _activeGrabTemplate is null)
         {
             destinationTextBox.SelectedText = FrameText;
         }
+
+        UpdateTemplateRegionOverlay();
     }
 
     private void Window_Closed(object? sender, EventArgs e)
@@ -3364,15 +3470,37 @@ new GrabFrameOperationArgs()
             e.CanExecute = true;
     }
 
-    private void GrabExecuted(object sender, ExecutedRoutedEventArgs e)
+    private async void GrabExecuted(object sender, ExecutedRoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(FrameText))
+        string outputText = FrameText;
+
+        if (_activeGrabTemplate is not null)
+        {
+            if (isStaticImageSource && frameContentImageSource is BitmapSource bmpSrc)
+            {
+                using System.Drawing.Bitmap bmp = ImageMethods.BitmapSourceToBitmap(bmpSrc);
+                outputText = await GrabTemplateExecutor.ExecuteTemplateOnBitmapAsync(
+                    _activeGrabTemplate, bmp, CurrentLanguage);
+            }
+            else
+            {
+                System.Drawing.Rectangle screenRect = GetContentAreaScreenRect();
+                Rect captureRect = new(screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height);
+                outputText = await GrabTemplateExecutor.ExecuteTemplateAsync(
+                    _activeGrabTemplate, captureRect, CurrentLanguage);
+            }
+
+            if (!string.IsNullOrWhiteSpace(outputText))
+                GrabTemplateManager.RecordUsage(_activeGrabTemplate.Id);
+        }
+
+        if (string.IsNullOrWhiteSpace(outputText))
             return;
 
         if (destinationTextBox is not null)
         {
-            if (AlwaysUpdateEtwCheckBox.IsChecked is false)
-                destinationTextBox.SelectedText = FrameText;
+            if (_activeGrabTemplate is not null || AlwaysUpdateEtwCheckBox.IsChecked is false)
+                destinationTextBox.SelectedText = outputText;
 
             destinationTextBox.Select(destinationTextBox.SelectionStart + destinationTextBox.SelectionLength, 0);
             destinationTextBox.AppendText(Environment.NewLine);
@@ -3384,10 +3512,10 @@ new GrabFrameOperationArgs()
         }
 
         if (!DefaultSettings.NeverAutoUseClipboard)
-            try { Clipboard.SetDataObject(FrameText, true); } catch { }
+            try { Clipboard.SetDataObject(outputText, true); } catch { }
 
         if (DefaultSettings.ShowToast)
-            NotificationUtilities.ShowToast(FrameText);
+            NotificationUtilities.ShowToast(outputText);
 
         if (CloseOnGrabMenuItem.IsChecked)
             Close();

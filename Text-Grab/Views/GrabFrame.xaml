@@ -537,6 +537,11 @@
                                         </ContextMenu>
                                     </Canvas.ContextMenu>
                                 </Canvas>
+                                <Canvas
+                                    x:Name="TemplateRegionOverlayCanvas"
+                                    Panel.ZIndex="5"
+                                    ClipToBounds="True"
+                                    IsHitTestVisible="False" />
                             </Grid>
                         </Viewbox>
                     </controls:ZoomBorder>
@@ -905,16 +910,20 @@
                             ToolTip="Open Text Grab Settings"
                             Visibility="Collapsed" />
 
-                        <ToggleButton
-                            x:Name="SaveAsTemplateBTN"
-                            Width="30"
+                        <ui:DropDownButton
+                            x:Name="TemplateMenuButton"
+                            Width="50"
                             Height="30"
                             Margin="6,0,0,0"
-                            Click="SaveAsTemplate_Click"
-                            Style="{StaticResource ToggleSymbolButton}"
-                            ToolTip="Save current Ctrl+drag regions as a Grab Template">
-                            <ui:SymbolIcon Symbol="DocumentSave24" />
-                        </ToggleButton>
+                            Padding="0"
+                            ToolTip="Select or create a Grab Template">
+                            <ui:DropDownButton.Content>
+                                <ui:SymbolIcon Symbol="DocumentSave24" />
+                            </ui:DropDownButton.Content>
+                            <ui:DropDownButton.Flyout>
+                                <ContextMenu x:Name="TemplateContextMenu" Opened="TemplateContextMenu_Opened" />
+                            </ui:DropDownButton.Flyout>
+                        </ui:DropDownButton>
                     </StackPanel>
 
                     <controls:CollapsibleButton

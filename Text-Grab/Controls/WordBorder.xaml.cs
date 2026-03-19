@@ -482,8 +482,12 @@ public partial class WordBorder : UserControl, INotifyPropertyChanged
 
             if (!WindowsAiUtilities.CanDeviceUseWinAI())
             {
-                MessageBox.Show("Windows AI is not available on this device.", 
-                    "Translation Not Available", MessageBoxButton.OK, MessageBoxImage.Information);
+                await new Wpf.Ui.Controls.MessageBox
+                {
+                    Title = "Translation Not Available",
+                    Content = "Windows AI is not available on this device.",
+                    CloseButtonText = "OK"
+                }.ShowDialogAsync();
                 return;
             }
 
@@ -513,8 +517,12 @@ public partial class WordBorder : UserControl, INotifyPropertyChanged
             catch (Exception ex)
             {
                 Debug.WriteLine($"Translation failed: {ex.Message}");
-                MessageBox.Show($"Translation failed: {ex.Message}", 
-                    "Translation Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                await new Wpf.Ui.Controls.MessageBox
+                {
+                    Title = "Translation Error",
+                    Content = $"Translation failed: {ex.Message}",
+                    CloseButtonText = "OK"
+                }.ShowDialogAsync();
             }
         }
 

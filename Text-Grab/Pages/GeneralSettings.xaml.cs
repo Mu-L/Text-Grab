@@ -393,7 +393,7 @@ public partial class GeneralSettings : Page
         Singleton<WebSearchUrlModel>.Instance.DefaultSearcher = newDefault;
     }
 
-    private void AddToContextMenuCheckBox_Checked(object sender, RoutedEventArgs e)
+    private async void AddToContextMenuCheckBox_Checked(object sender, RoutedEventArgs e)
     {
         if (!settingsSet)
             return;
@@ -412,15 +412,16 @@ public partial class GeneralSettings : Page
             settingsSet = true;
 
             // Show error message to user
-            System.Windows.MessageBox.Show(
-                errorMessage ?? "Failed to add Text Grab to the context menu.",
-                "Context Menu Registration Failed",
-                System.Windows.MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Context Menu Registration Failed",
+                Content = errorMessage ?? "Failed to add Text Grab to the context menu.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
     }
 
-    private void AddToContextMenuCheckBox_Unchecked(object sender, RoutedEventArgs e)
+    private async void AddToContextMenuCheckBox_Unchecked(object sender, RoutedEventArgs e)
     {
         if (!settingsSet)
             return;
@@ -439,11 +440,12 @@ public partial class GeneralSettings : Page
             AddToContextMenuCheckBox.IsChecked = true;
             settingsSet = true;
 
-            System.Windows.MessageBox.Show(
-                errorMessage ?? "Some context menu entries could not be removed.",
-                "Context Menu Removal Failed",
-                System.Windows.MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Context Menu Removal Failed",
+                Content = errorMessage ?? "Some context menu entries could not be removed.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
     }
 

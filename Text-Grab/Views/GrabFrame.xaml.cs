@@ -126,7 +126,12 @@ public partial class GrabFrame : Window
         if (string.IsNullOrEmpty(imagePath))
         {
             Debug.WriteLine("GrabFrame: Empty image path provided");
-            Loaded += (s, e) => MessageBox.Show("No image file path was provided.", "Text Grab", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Loaded += async (s, e) => await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Text Grab",
+                Content = "No image file path was provided.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -136,7 +141,12 @@ public partial class GrabFrame : Window
         if (!File.Exists(absolutePath))
         {
             Debug.WriteLine($"GrabFrame: Image file not found: {absolutePath}");
-            Loaded += (s, e) => MessageBox.Show($"Image file not found:\n{absolutePath}", "Text Grab", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Loaded += async (s, e) => await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Text Grab",
+                Content = $"Image file not found:\n{absolutePath}",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -2120,7 +2130,7 @@ public partial class GrabFrame : Window
         }
     }
 
-    private void NotifyIfUiAutomationNeedsLiveSource(ILanguage language)
+    private async void NotifyIfUiAutomationNeedsLiveSource(ILanguage language)
     {
         if (!CaptureLanguageUtilities.RequiresLiveUiAutomationSource(
             language,
@@ -2132,7 +2142,12 @@ public partial class GrabFrame : Window
             ? "UI Automation reads live application controls. This Grab Frame currently contains a static image, so Text Grab will fall back to OCR for image-only operations."
             : "UI Automation reads live application controls. This Grab Frame currently contains a static image, so image-only operations will not return UI Automation text.";
 
-        MessageBox.Show(message, "Text Grab", MessageBoxButton.OK, MessageBoxImage.Information);
+        await new Wpf.Ui.Controls.MessageBox
+        {
+            Title = "Text Grab",
+            Content = message,
+            CloseButtonText = "OK"
+        }.ShowDialogAsync();
     }
 
     private void LanguagesComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2814,7 +2829,7 @@ new GrabFrameOperationArgs()
         UpdateTemplateBadges();
     }
 
-    private void SaveTemplateSave_Click(object sender, RoutedEventArgs e)
+    private async void SaveTemplateSave_Click(object sender, RoutedEventArgs e)
     {
         string name = TemplateNameBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -2830,11 +2845,12 @@ new GrabFrameOperationArgs()
 
         if (wordBorders.Count == 0 && patternMatches.Count == 0)
         {
-            MessageBox.Show(
-                "Use Ctrl+drag to draw at least one region, or add a pattern placeholder, before saving.",
-                "No Regions or Patterns",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "No Regions or Patterns",
+                Content = "Use Ctrl+drag to draw at least one region, or add a pattern placeholder, before saving.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -2889,11 +2905,12 @@ new GrabFrameOperationArgs()
                 ? $"{regions.Count} region(s)"
                 : $"{patternMatches.Count} pattern(s)";
 
-        MessageBox.Show(
-            $"Template \"{name}\" saved with {itemsDesc}.\n\nEnable it in Post-Grab Actions Settings to use it during a Fullscreen Grab.",
-            "Template Saved",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        await new Wpf.Ui.Controls.MessageBox
+        {
+            Title = "Template Saved",
+            Content = $"Template \"{name}\" saved with {itemsDesc}.\n\nEnable it in Post-Grab Actions Settings to use it during a Fullscreen Grab.",
+            CloseButtonText = "OK"
+        }.ShowDialogAsync();
     }
 
     /// <summary>
@@ -3078,7 +3095,12 @@ new GrabFrameOperationArgs()
         {
             hasLoadedImageSource = false;
             UnfreezeGrabFrame();
-            MessageBox.Show("Not an image");
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Text Grab",
+                Content = "Not an image",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
     }
 
@@ -3682,7 +3704,7 @@ new GrabFrameOperationArgs()
         DefaultSettings.Save();
     }
 
-    private void TranslateToggleButton_Click(object sender, RoutedEventArgs e)
+    private async void TranslateToggleButton_Click(object sender, RoutedEventArgs e)
     {
         if (TranslateToggleButton.IsChecked is bool isChecked)
         {
@@ -3695,8 +3717,12 @@ new GrabFrameOperationArgs()
             {
                 if (!WindowsAiUtilities.CanDeviceUseWinAI())
                 {
-                    MessageBox.Show("Windows AI is not available on this device. Translation requires Windows AI support.",
-                        "Translation Not Available", MessageBoxButton.OK, MessageBoxImage.Information);
+                    await new Wpf.Ui.Controls.MessageBox
+                    {
+                        Title = "Translation Not Available",
+                        Content = "Windows AI is not available on this device. Translation requires Windows AI support.",
+                        CloseButtonText = "OK"
+                    }.ShowDialogAsync();
                     TranslateToggleButton.IsChecked = false;
                     isTranslationEnabled = false;
                     return;

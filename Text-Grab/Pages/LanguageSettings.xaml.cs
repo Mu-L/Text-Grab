@@ -255,7 +255,12 @@ public partial class LanguageSettings : Page
         {
             // The user refused the elevation.
             // Handle this situation as you prefer.
-            MessageBox.Show(ex.Message);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Error",
+                Content = ex.Message,
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
     }
 

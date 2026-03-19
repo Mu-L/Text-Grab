@@ -317,7 +317,12 @@ public static partial class WindowUtilities
         }
         catch (Exception ex)
         {
-            MessageBox.Show("An error occurred while trying to open a new window. Please try again.", ex.Message);
+            _ = new Wpf.Ui.Controls.MessageBox
+            {
+                Title = ex.Message,
+                Content = "An error occurred while trying to open a new window. Please try again.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
         return newWindow;
     }

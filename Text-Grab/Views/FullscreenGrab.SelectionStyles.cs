@@ -1135,11 +1135,12 @@ public partial class FullscreenGrab
                 {
                     if (!showedFreeformTemplateMessage)
                     {
-                        MessageBox.Show(
-                            "Grab Templates are currently available only for rectangular selections. Freeform captures will keep their OCR text without applying templates.",
-                            "Text Grab",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+                        await new Wpf.Ui.Controls.MessageBox
+                        {
+                            Title = "Text Grab",
+                            Content = "Grab Templates are currently available only for rectangular selections. Freeform captures will keep their OCR text without applying templates.",
+                            CloseButtonText = "OK"
+                        }.ShowDialogAsync();
                         showedFreeformTemplateMessage = true;
                     }
 

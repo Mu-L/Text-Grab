@@ -43,7 +43,12 @@ public class IoUtilities
             }
             catch (Exception)
             {
-                System.Windows.MessageBox.Show($"Failed to read {pathOfFileToOpen}");
+                await new Wpf.Ui.Controls.MessageBox
+                {
+                    Title = "Error",
+                    Content = $"Failed to read {pathOfFileToOpen}",
+                    CloseButtonText = "OK"
+                }.ShowDialogAsync();
             }
         }
         else

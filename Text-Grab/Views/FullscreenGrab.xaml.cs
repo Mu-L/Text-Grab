@@ -805,6 +805,8 @@ public partial class FullscreenGrab : Window
         Canvas.SetLeft(selectBorder, leftValue);
         Canvas.SetTop(selectBorder, topValue);
 
+        Rect panRect = new(leftValue, topValue, selectBorder.Width, selectBorder.Height);
+        UpdateSelectionOutline(panRect, ShouldDrawSelectionOutline(CurrentSelectionStyle));
         UpdateTemplateRegionOverlays(leftValue, topValue, selectBorder.Width, selectBorder.Height);
     }
 

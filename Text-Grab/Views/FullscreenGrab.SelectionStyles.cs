@@ -425,10 +425,11 @@ public partial class FullscreenGrab
         }
 
         EnsureSelectionOutlineVisible();
-        selectionOutlineBorder.Width = Math.Max(0, rect.Width);
-        selectionOutlineBorder.Height = Math.Max(0, rect.Height);
-        Canvas.SetLeft(selectionOutlineBorder, rect.Left);
-        Canvas.SetTop(selectionOutlineBorder, rect.Top);
+        double t = selectionOutlineBorder.BorderThickness.Left;
+        selectionOutlineBorder.Width = Math.Max(0, rect.Width + 2 * t);
+        selectionOutlineBorder.Height = Math.Max(0, rect.Height + 2 * t);
+        Canvas.SetLeft(selectionOutlineBorder, rect.Left - t);
+        Canvas.SetTop(selectionOutlineBorder, rect.Top - t);
     }
 
     private void ClearSelectionOutline()

@@ -231,6 +231,22 @@ public static partial class OcrUtilities
 
     }
 
+    public static async Task<(IOcrLinesWords?, double)> GetOcrResultFromBitmapAsync(Bitmap bmp, ILanguage language)
+    {
+        language = GetCompatibleOcrLanguage(language);
+
+        if (language is WindowsAiLang)
+            return (await WindowsAiUtilities.GetOcrResultAsync(bmp), 1.0);
+
+        if (language is not GlobalLang globalLang)
+            globalLang = new GlobalLang(language.LanguageTag);
+
+        double scale = await GetIdealScaleFactorForOcrAsync(bmp, language);
+        using Bitmap scaledBitmap = ImageMethods.ScaleBitmapUniform(bmp, scale);
+        IOcrLinesWords ocrResult = await GetOcrResultFromImageAsync(scaledBitmap, globalLang);
+        return (ocrResult, scale);
+    }
+
     public static async Task<IOcrLinesWords> GetOcrResultFromImageAsync(SoftwareBitmap scaledBitmap, ILanguage language)
     {
         language = GetCompatibleOcrLanguage(language);

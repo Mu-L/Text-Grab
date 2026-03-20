@@ -1398,8 +1398,15 @@ public partial class GrabFrame : Window
 
         if (ocrResultOfWindow is null || ocrResultOfWindow.Lines.Length == 0)
         {
-            ILanguage lang = CurrentLanguage ?? LanguageUtilities.GetCurrentInputLanguage();
-            (ocrResultOfWindow, windowFrameImageScale) = await OcrUtilities.GetOcrResultFromRegionAsync(rectCanvasSize, CurrentLanguage);
+            if (frameContentImageSource is BitmapSource frozenBmp)
+            {
+                using System.Drawing.Bitmap bmpForOcr = ImageMethods.BitmapSourceToBitmap(frozenBmp);
+                (ocrResultOfWindow, windowFrameImageScale) = await OcrUtilities.GetOcrResultFromBitmapAsync(bmpForOcr, CurrentLanguage);
+            }
+            else
+            {
+                (ocrResultOfWindow, windowFrameImageScale) = await OcrUtilities.GetOcrResultFromRegionAsync(rectCanvasSize, CurrentLanguage);
+            }
         }
 
         if (ocrResultOfWindow is null)
@@ -1414,7 +1421,7 @@ public partial class GrabFrame : Window
         System.Drawing.Bitmap? bmp = null;
         bool shouldDisposeBmp = false;
 
-        if (isStaticImageSource && frameContentImageSource is BitmapSource bmpImg)
+        if (frameContentImageSource is BitmapSource bmpImg)
         {
             bmp = ImageMethods.BitmapSourceToBitmap(bmpImg);
             shouldDisposeBmp = true;
@@ -1426,7 +1433,9 @@ public partial class GrabFrame : Window
         }
 
         int lineNumber = 0;
-        (double viewBoxZoomFactor, double borderToCanvasX, double borderToCanvasY) = GetOverlayRenderMetrics();
+        bool useImageCoords = frameContentImageSource is not null;
+        (double viewBoxZoomFactor, double borderToCanvasX, double borderToCanvasY) =
+            useImageCoords ? (1.0, 0.0, 0.0) : GetOverlayRenderMetrics();
 
         foreach (IOcrLine ocrLine in ocrResultOfWindow.Lines)
         {
@@ -1518,7 +1527,7 @@ public partial class GrabFrame : Window
         }
 
         UiAutomationOverlaySnapshot? overlaySnapshot = null;
-        if (isStaticImageSource && frozenUiAutomationSnapshot is not null)
+        if ((isStaticImageSource || IsFreezeMode) && frozenUiAutomationSnapshot is not null)
         {
             overlaySnapshot = frozenUiAutomationSnapshot;
         }
@@ -1553,7 +1562,9 @@ public partial class GrabFrame : Window
             shouldDisposeBmp = true;
         }
 
-        (double viewBoxZoomFactor, double borderToCanvasX, double borderToCanvasY) = GetOverlayRenderMetrics();
+        bool useImageCoords = frameContentImageSource is not null;
+        (double viewBoxZoomFactor, double borderToCanvasX, double borderToCanvasY) =
+            useImageCoords ? (1.0, 0.0, 0.0) : GetOverlayRenderMetrics();
         Rect sourceBounds = overlaySnapshot.CaptureBounds;
         int lineNumber = 0;
 
@@ -2580,10 +2591,10 @@ new GrabFrameOperationArgs()
     GrabFrameCanvas = RectanglesCanvas
 });
 
-        if (hasLoadedImageSource)
+        if (hasLoadedImageSource || IsFreezeMode)
         {
-            // For loaded images, clear OCR results and re-run OCR on the same image.
-            // Zoom must be reset because the screen-capture-based OCR pipeline
+            // For loaded or frozen images, clear OCR results and re-run OCR on the same stored image.
+            // Zoom must be reset because the OCR pipeline
             // calculates word border positions assuming no zoom transform.
             MainZoomBorder.Reset();
             RectanglesCanvas.RenderTransform = Transform.Identity;
@@ -2592,9 +2603,6 @@ new GrabFrameOperationArgs()
             ClearRenderedWordBorders();
             MatchesTXTBLK.Text = "- Matches";
             UpdateFrameText();
-
-            // Allow WPF to repaint the unzoomed view before screen-capture OCR
-            await Task.Delay(200);
         }
         else
         {

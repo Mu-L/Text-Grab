@@ -357,6 +357,34 @@
                             Tag="ZoomWhenFrozen" />
                         <Separator />
                         <MenuItem
+                            x:Name="ResetViewMenuItem"
+                            Click="ResetViewMenuItem_Click"
+                            Header="Reset View"
+                            InputGestureText="Middle Click" />
+                        <Separator />
+                        <MenuItem
+                            x:Name="ShowWordBordersMenuItem"
+                            Click="ShowWordBordersMenuItem_Click"
+                            Header="Show Word Borders"
+                            IsCheckable="True"
+                            IsChecked="True" />
+                        <MenuItem Header="Overlay Opacity">
+                            <MenuItem
+                                x:Name="OverlayOpacityOffMenuItem"
+                                Click="OverlayOpacityMenuItem_Click"
+                                Header="Off"
+                                IsCheckable="True"
+                                Tag="0" />
+                            <MenuItem
+                                x:Name="OverlayOpacityLowMenuItem"
+                                Click="OverlayOpacityMenuItem_Click"
+                                Header="5%"
+                                IsCheckable="True"
+                                IsChecked="True"
+                                Tag="0.05" />
+                        </MenuItem>
+                        <Separator />
+                        <MenuItem
                             x:Name="CloseOnGrabMenuItem"
                             Click="CloseOnGrabMenuItem_Click"
                             Header="Close Frame on Grab"

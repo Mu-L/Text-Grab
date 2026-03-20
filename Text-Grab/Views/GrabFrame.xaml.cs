@@ -84,6 +84,7 @@ public partial class GrabFrame : Window
     private readonly ObservableCollection<WordBorder> wordBorders = [];
     private static readonly Settings DefaultSettings = AppUtilities.TextGrabSettings;
     private ScrollBehavior scrollBehavior = ScrollBehavior.Resize;
+    private double overlayOpacity = 0.05;
     private bool isTranslationEnabled = false;
     private string translationTargetLanguage = "English";
     private readonly DispatcherTimer translationTimer = new();
@@ -3356,7 +3357,7 @@ new GrabFrameOperationArgs()
         GrabFrameImage.Opacity = 0;
         frameContentImageSource = null;
         historyItem = null;
-        RectanglesBorder.Background.Opacity = 0.05;
+        RectanglesBorder.Background.Opacity = overlayOpacity;
         FreezeToggleButton.IsChecked = false;
         FreezeToggleButton.Visibility = Visibility.Visible;
         Background = new SolidColorBrush(Colors.Transparent);
@@ -3481,6 +3482,36 @@ new GrabFrameOperationArgs()
     {
         DefaultSettings.CloseFrameOnGrab = CloseOnGrabMenuItem.IsChecked is true;
         DefaultSettings.Save();
+    }
+
+    private void ResetViewMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        MainZoomBorder.Reset();
+    }
+
+    private void ShowWordBordersMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        RectanglesCanvas.Visibility = ShowWordBordersMenuItem.IsChecked is true
+            ? Visibility.Visible
+            : Visibility.Hidden;
+    }
+
+    private void OverlayOpacityMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem clicked
+            || clicked.Tag is not string tagStr
+            || !double.TryParse(tagStr, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double opacity))
+            return;
+
+        overlayOpacity = opacity;
+
+        OverlayOpacityOffMenuItem.IsChecked = false;
+        OverlayOpacityLowMenuItem.IsChecked = false;
+        clicked.IsChecked = true;
+
+        if (!IsFreezeMode)
+            RectanglesBorder.Background.Opacity = overlayOpacity;
     }
 
     private void CanExecuteGrab(object sender, CanExecuteRoutedEventArgs e)

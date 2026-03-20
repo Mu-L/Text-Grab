@@ -349,6 +349,12 @@
                             Header="Scroll Zooms Grab Frame (preview)"
                             IsCheckable="True"
                             Tag="Zoom" />
+                        <MenuItem
+                            x:Name="ZoomWhenFrozenScrollMenuItem"
+                            Click="ScrollBehaviorMenuItem_Click"
+                            Header="Zoom when frozen"
+                            IsCheckable="True"
+                            Tag="ZoomWhenFrozen" />
                         <Separator />
                         <MenuItem
                             x:Name="CloseOnGrabMenuItem"

@@ -83,6 +83,7 @@ public enum ScrollBehavior
     None = 0,
     Resize = 1,
     Zoom = 2,
+    ZoomWhenFrozen = 3,
 }
 
 public enum LanguageKind

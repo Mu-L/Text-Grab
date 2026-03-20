@@ -456,6 +456,9 @@ public partial class GrabFrame : Window
     /// </summary>
     internal System.Drawing.Rectangle GetContentAreaScreenRect()
     {
+        if (PresentationSource.FromVisual(this) is null)
+            return System.Drawing.Rectangle.Empty;
+
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         Point topLeft = RectanglesBorder.PointToScreen(new Point(0, 0));
         return new System.Drawing.Rectangle(
@@ -1744,6 +1747,9 @@ public partial class GrabFrame : Window
         Background = new SolidColorBrush(Colors.DimGray);
         RectanglesBorder.Background.Opacity = 0;
         IsFreezeMode = true;
+
+        if (scrollBehavior == ScrollBehavior.ZoomWhenFrozen)
+            MainZoomBorder.CanZoom = true;
     }
 
     private void SyncRectanglesCanvasSizeToImage()
@@ -2085,6 +2091,9 @@ public partial class GrabFrame : Window
 
             return;
         }
+
+        if (scrollBehavior == ScrollBehavior.ZoomWhenFrozen && IsFreezeMode)
+            return; // ZoomBorder handles scroll when frozen
 
         e.Handled = true;
         double aspectRatio = (Height - 66) / (Width - 4);
@@ -3021,7 +3030,7 @@ new GrabFrameOperationArgs()
     private void UpdateTemplateButtonHighlight()
     {
         TemplateMenuButton.Background = _activeGrabTemplate is not null
-            ? (System.Windows.Media.Brush)FindResource("AccentButtonBackground")
+            ? (System.Windows.Media.Brush)FindResource("DarkTeal")
             : System.Windows.Media.Brushes.Transparent;
     }
 
@@ -3352,6 +3361,10 @@ new GrabFrameOperationArgs()
         FreezeToggleButton.Visibility = Visibility.Visible;
         Background = new SolidColorBrush(Colors.Transparent);
         IsFreezeMode = false;
+
+        if (scrollBehavior == ScrollBehavior.ZoomWhenFrozen)
+            MainZoomBorder.CanZoom = false;
+
         reDrawTimer.Start();
     }
 
@@ -3578,19 +3591,29 @@ new GrabFrameOperationArgs()
                 NoScrollBehaviorMenuItem.IsChecked = true;
                 ResizeScrollMenuItem.IsChecked = false;
                 ZoomScrollMenuItem.IsChecked = false;
+                ZoomWhenFrozenScrollMenuItem.IsChecked = false;
                 MainZoomBorder.CanZoom = false;
                 break;
             case ScrollBehavior.Resize:
                 NoScrollBehaviorMenuItem.IsChecked = false;
                 ResizeScrollMenuItem.IsChecked = true;
                 ZoomScrollMenuItem.IsChecked = false;
+                ZoomWhenFrozenScrollMenuItem.IsChecked = false;
                 MainZoomBorder.CanZoom = false;
                 break;
             case ScrollBehavior.Zoom:
                 NoScrollBehaviorMenuItem.IsChecked = false;
                 ResizeScrollMenuItem.IsChecked = false;
                 ZoomScrollMenuItem.IsChecked = true;
+                ZoomWhenFrozenScrollMenuItem.IsChecked = false;
                 MainZoomBorder.CanZoom = true;
+                break;
+            case ScrollBehavior.ZoomWhenFrozen:
+                NoScrollBehaviorMenuItem.IsChecked = false;
+                ResizeScrollMenuItem.IsChecked = false;
+                ZoomScrollMenuItem.IsChecked = false;
+                ZoomWhenFrozenScrollMenuItem.IsChecked = true;
+                MainZoomBorder.CanZoom = IsFreezeMode;
                 break;
             default:
                 break;

@@ -125,6 +125,8 @@ public static class ImageMethods
                 // transparent content area. This is always correct regardless of DPI,
                 // border thickness, or title/bottom bar heights.
                 Rectangle contentRect = grabFrame.GetContentAreaScreenRect();
+                if (contentRect == Rectangle.Empty)
+                    return new Bitmap(1, 1);
                 thisCorrectedLeft = contentRect.X;
                 thisCorrectedTop = contentRect.Y;
                 windowWidth = contentRect.Width;

@@ -573,6 +573,7 @@
                                 </Canvas>
                                 <Canvas
                                     x:Name="TemplateRegionOverlayCanvas"
+                                    Margin="-4,-2,0,0"
                                     Panel.ZIndex="5"
                                     ClipToBounds="True"
                                     IsHitTestVisible="False" />

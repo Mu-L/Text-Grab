@@ -1771,12 +1771,14 @@ public partial class GrabFrame : Window
         {
             GrabFrameImage.Width = sourceWidth;
             RectanglesCanvas.Width = sourceWidth;
+            TemplateRegionOverlayCanvas.Width = sourceWidth;
         }
 
         if (double.IsFinite(sourceHeight) && sourceHeight > 0)
         {
             GrabFrameImage.Height = sourceHeight;
             RectanglesCanvas.Height = sourceHeight;
+            TemplateRegionOverlayCanvas.Height = sourceHeight;
         }
     }
 
@@ -2723,6 +2725,8 @@ new GrabFrameOperationArgs()
         RectanglesCanvas.RenderTransform = Transform.Identity;
         RectanglesCanvas.ClearValue(WidthProperty);
         RectanglesCanvas.ClearValue(HeightProperty);
+        TemplateRegionOverlayCanvas.ClearValue(WidthProperty);
+        TemplateRegionOverlayCanvas.ClearValue(HeightProperty);
         GrabFrameImage.ClearValue(WidthProperty);
         GrabFrameImage.ClearValue(HeightProperty);
         IsOcrValid = false;

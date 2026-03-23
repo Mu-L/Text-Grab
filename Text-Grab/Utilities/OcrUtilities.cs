@@ -421,10 +421,7 @@ public static partial class OcrUtilities
         }
 
         if (DefaultSettings.TryToReadBarcodes)
-        {
-            OcrOutput barcodeResult = BarcodeUtilities.TryToReadBarcodes(bitmap);
-            outputs.Add(barcodeResult);
-        }
+            outputs.AddRange(BarcodeUtilities.TryToReadBarcodes(bitmap));
 
         return outputs;
     }

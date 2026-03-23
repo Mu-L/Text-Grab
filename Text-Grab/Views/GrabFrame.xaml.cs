@@ -3295,9 +3295,25 @@ new GrabFrameOperationArgs()
     private void TryToReadBarcodes(DpiScale dpi)
     {
         if (DefaultSettings.GrabFrameReadBarcodes is false)
+        {
+            Debug.WriteLine("TryToReadBarcodes: GrabFrameReadBarcodes is disabled, returning early");
             return;
+        }
 
-        System.Drawing.Bitmap bitmapOfGrabFrame = ImageMethods.GetWindowsBoundsBitmap(this);
+        System.Drawing.Bitmap? bitmapOfGrabFrame = null;
+
+        if (frameContentImageSource is BitmapSource frameBitmapSource)
+        {
+            Debug.WriteLine("reuse frameBitmapSource");
+            bitmapOfGrabFrame = ImageMethods.BitmapSourceToBitmap(frameBitmapSource);
+        }
+        else
+        {
+            Debug.WriteLine("Could not reuse frameBitmapSource");
+            bitmapOfGrabFrame = ImageMethods.GetWindowsBoundsBitmap(this);
+        }
+
+        Debug.WriteLine($"TryToReadBarcodes: bitmap size = {bitmapOfGrabFrame.Width}x{bitmapOfGrabFrame.Height}, dpi = {dpi.DpiScaleX}x{dpi.DpiScaleY}");
 
         BarcodeReader barcodeReader = new()
         {
@@ -3305,43 +3321,82 @@ new GrabFrameOperationArgs()
             Options = new ZXing.Common.DecodingOptions { TryHarder = true }
         };
 
-        Result result = barcodeReader.Decode(bitmapOfGrabFrame);
+        Result[]? results = barcodeReader.DecodeMultiple(bitmapOfGrabFrame);
 
-        if (result is null)
+        if (results is null)
+        {
+            Debug.WriteLine("TryToReadBarcodes: DecodeMultiple returned null (no barcodes found)");
             return;
+        }
 
-        ResultPoint[] rawPoints = result.ResultPoints;
+        Debug.WriteLine($"TryToReadBarcodes: DecodeMultiple found {results.Length} result(s)");
 
-        float[] xs = [.. rawPoints.Reverse().Take(4).Select(x => x.X)];
-        float[] ys = [.. rawPoints.Reverse().Take(4).Select(x => x.Y)];
-
-        Point minPoint = new(xs.Min(), ys.Min());
-        Point maxPoint = new(xs.Max(), ys.Max());
-        Point diffs = new(maxPoint.X - minPoint.X, maxPoint.Y - minPoint.Y);
-
-        if (diffs.Y < 5)
-            diffs.Y = diffs.X / 10;
-
-        WordBorder wb = new()
+        foreach (Result result in results)
         {
-            Word = result.Text,
-            Width = diffs.X / dpi.DpiScaleX + 12,
-            Height = diffs.Y / dpi.DpiScaleY + 12,
-            Left = minPoint.X / (dpi.DpiScaleX) - 6,
-            Top = minPoint.Y / (dpi.DpiScaleY) - 6,
-            OwnerGrabFrame = this
-        };
-        wb.SetAsBarcode();
-        wordBorders.Add(wb);
-        _ = RectanglesCanvas.Children.Add(wb);
+            if (result?.Text is null)
+            {
+                Debug.WriteLine("TryToReadBarcodes: skipping result with null Text");
+                continue;
+            }
 
-        UndoRedo.InsertUndoRedoOperation(UndoRedoOperation.AddWordBorder,
-        new GrabFrameOperationArgs()
-        {
-            WordBorder = wb,
-            WordBorders = wordBorders,
-            GrabFrameCanvas = RectanglesCanvas
-        });
+            Debug.WriteLine($"TryToReadBarcodes: result format={result.BarcodeFormat}, text=\"{result.Text}\"");
+
+            ResultPoint[] rawPoints = result.ResultPoints;
+
+            if (rawPoints is null || rawPoints.Length == 0)
+            {
+                Debug.WriteLine("TryToReadBarcodes: rawPoints is null or empty, skipping");
+                continue;
+            }
+
+            Debug.WriteLine($"TryToReadBarcodes: rawPoints count={rawPoints.Length}, null count={rawPoints.Count(p => p is null)}");
+            for (int i = 0; i < rawPoints.Length; i++)
+                Debug.WriteLine($"  rawPoints[{i}] = {(rawPoints[i] is null ? "null" : $"({rawPoints[i].X:F1}, {rawPoints[i].Y:F1})")}");
+
+            ResultPoint[] validPoints = [.. rawPoints.Where(p => p is not null).Reverse().Take(4)];
+            float[] xs = [.. validPoints.Select(x => x.X)];
+            float[] ys = [.. validPoints.Select(x => x.Y)];
+
+            if (xs.Length == 0)
+            {
+                Debug.WriteLine("TryToReadBarcodes: no valid points after filtering, skipping");
+                continue;
+            }
+
+            Point minPoint = new(xs.Min(), ys.Min());
+            Point maxPoint = new(xs.Max(), ys.Max());
+            Point diffs = new(maxPoint.X - minPoint.X, maxPoint.Y - minPoint.Y);
+
+            Debug.WriteLine($"TryToReadBarcodes: minPoint=({minPoint.X:F1},{minPoint.Y:F1}), maxPoint=({maxPoint.X:F1},{maxPoint.Y:F1}), diffs=({diffs.X:F1},{diffs.Y:F1})");
+
+            if (diffs.Y < 5)
+            {
+                Debug.WriteLine($"TryToReadBarcodes: diffs.Y < 5, adjusting diffs.Y from {diffs.Y:F1} to {diffs.X / 10:F1}");
+                diffs.Y = diffs.X / 10;
+            }
+
+            WordBorder wb = new()
+            {
+                Word = result.Text,
+                Width = diffs.X / dpi.DpiScaleX + 12,
+                Height = diffs.Y / dpi.DpiScaleY + 12,
+                Left = minPoint.X / (dpi.DpiScaleX) - 6,
+                Top = minPoint.Y / (dpi.DpiScaleY) - 6,
+                OwnerGrabFrame = this
+            };
+            Debug.WriteLine($"TryToReadBarcodes: WordBorder Left={wb.Left:F1}, Top={wb.Top:F1}, Width={wb.Width:F1}, Height={wb.Height:F1}");
+            wb.SetAsBarcode();
+            wordBorders.Add(wb);
+            _ = RectanglesCanvas.Children.Add(wb);
+
+            UndoRedo.InsertUndoRedoOperation(UndoRedoOperation.AddWordBorder,
+            new GrabFrameOperationArgs()
+            {
+                WordBorder = wb,
+                WordBorders = wordBorders,
+                GrabFrameCanvas = RectanglesCanvas
+            });
+        }
     }
 
     private void UndoExecuted(object sender, ExecutedRoutedEventArgs e)

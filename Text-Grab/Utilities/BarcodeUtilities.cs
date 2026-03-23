@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Text_Grab.Models;
 using ZXing;
@@ -14,12 +16,10 @@ namespace Text_Grab.Utilities;
 
 public static class BarcodeUtilities
 {
-    private static OcrOutput EmptyBarcodeOutput => new() { Kind = OcrOutputKind.Barcode, RawOutput = string.Empty };
-
-    public static OcrOutput TryToReadBarcodes(Bitmap bitmap)
+    public static List<OcrOutput> TryToReadBarcodes(Bitmap bitmap)
     {
         if (!CanReadBitmapDimensions(bitmap))
-            return EmptyBarcodeOutput;
+            return [];
 
         BarcodeReader barcodeReader = new()
         {
@@ -27,38 +27,40 @@ public static class BarcodeUtilities
             Options = new DecodingOptions { TryHarder = true }
         };
 
-        Result? result = null;
+        Result[]? results = null;
 
         try
         {
-            result = barcodeReader.Decode(bitmap);
+            results = barcodeReader.DecodeMultiple(bitmap);
         }
         catch (ArgumentException ex)
         {
             Debug.WriteLine($"Unable to decode barcode from bitmap: {ex.Message}");
-            return EmptyBarcodeOutput;
+            return [];
         }
         catch (ObjectDisposedException ex)
         {
             Debug.WriteLine($"Unable to decode barcode from disposed bitmap: {ex.Message}");
-            return EmptyBarcodeOutput;
+            return [];
         }
         catch (ExternalException ex)
         {
             Debug.WriteLine($"Unable to decode barcode from GDI+ bitmap: {ex.Message}");
-            return EmptyBarcodeOutput;
+            return [];
         }
 
-        string resultString = string.Empty;
-        if (result is not null)
-            resultString = result.Text;
+        if (results is null)
+            return [];
 
-        return new OcrOutput()
-        {
-            Kind = OcrOutputKind.Barcode,
-            RawOutput = resultString,
-            SourceBitmap = bitmap,
-        };
+        return results
+            .Where(r => r?.Text is not null)
+            .Select(r => new OcrOutput()
+            {
+                Kind = OcrOutputKind.Barcode,
+                RawOutput = r.Text,
+                SourceBitmap = bitmap,
+            })
+            .ToList();
     }
 
     private static bool CanReadBitmapDimensions(Bitmap? bitmap)

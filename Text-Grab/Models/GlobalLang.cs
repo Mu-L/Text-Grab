@@ -27,7 +27,9 @@ public class GlobalLang : ILanguage
         }
         catch (System.ArgumentException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to initialize language '{inputLangTag}': {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Failed to initialize language '{inputLang}': {ex.Message}");
+            // return the language of the keyboard
+            language = new(System.Globalization.CultureInfo.CurrentCulture.Name);
         }
         AbbreviatedName = language.AbbreviatedName;
         CultureDisplayName = language.DisplayName;

@@ -89,7 +89,7 @@
                 Margin="24,6,0,0"
                 Opacity="0.75"
                 Style="{StaticResource TextBodyNormal}"
-                Text="Choose how Fullscreen Grab defines the capture area by default. Rectangle 1 is the standard drag-a-box capture, and Rectangle 2 lets you fine-tune the box before grabbing." />
+                Text="Choose how Fullscreen Grab defines the capture area by default. Region select is the standard drag-a-box capture." />
         </StackPanel>
 
         <CheckBox

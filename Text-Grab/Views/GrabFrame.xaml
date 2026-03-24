@@ -516,7 +516,7 @@
                                     Stretch="Uniform" />
                                 <Canvas
                                     x:Name="RectanglesCanvas"
-                                    Margin="-4,-2,0,0"
+                                    Margin="0"
                                     Background="Transparent"
                                     Focusable="True"
                                     IsHitTestVisible="True"

@@ -27,7 +27,6 @@ using Text_Grab.Services;
 using Text_Grab.UndoRedoOperations;
 using Text_Grab.Utilities;
 using Windows.Globalization;
-using Windows.Media.Ocr;
 using Windows.System;
 using ZXing;
 using ZXing.Windows.Compatibility;

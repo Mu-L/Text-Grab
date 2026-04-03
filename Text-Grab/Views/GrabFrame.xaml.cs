@@ -1454,6 +1454,9 @@ public partial class GrabFrame : Window
         (double viewBoxZoomFactor, double borderToCanvasX, double borderToCanvasY) =
             useImageCoords ? (1.0, 0.0, 0.0) : GetOverlayRenderMetrics();
 
+        if (useImageCoords)
+            SyncRectanglesCanvasSizeToImage();
+
         foreach (IOcrLine ocrLine in ocrResultOfWindow.Lines)
         {
             StringBuilder lineText = new();
@@ -1582,6 +1585,10 @@ public partial class GrabFrame : Window
         bool useImageCoords = frameContentImageSource is not null;
         (double viewBoxZoomFactor, double borderToCanvasX, double borderToCanvasY) =
             useImageCoords ? (1.0, 0.0, 0.0) : GetOverlayRenderMetrics();
+
+        if (useImageCoords)
+            SyncRectanglesCanvasSizeToImage();
+
         Rect sourceBounds = overlaySnapshot.CaptureBounds;
         int lineNumber = 0;
 

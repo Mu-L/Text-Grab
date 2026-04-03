@@ -544,6 +544,20 @@ public partial class GrabFrame : Window
         frameMessageTimer.Start();
     }
 
+    /// <summary>
+    /// When a static image is loaded and the active language is UI Automation (Direct Text),
+    /// silently switch to the OCR fallback language so no warning is shown.
+    /// </summary>
+    private void SwitchToOcrFallbackIfUiAutomation()
+    {
+        if (CurrentLanguage is not UiAutomationLang)
+            return;
+
+        ILanguage fallback = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+        currentLanguage = fallback;
+        SyncLanguageComboBoxSelection(fallback);
+    }
+
     private void SyncLanguageComboBoxSelection(ILanguage language)
     {
         if (LanguagesComboBox.Items.Count == 0)
@@ -2372,7 +2386,7 @@ public partial class GrabFrame : Window
         FreezeToggleButton.IsChecked = true;
         FreezeGrabFrame();
         FreezeToggleButton.Visibility = Visibility.Collapsed;
-        NotifyIfUiAutomationNeedsLiveSource(CurrentLanguage);
+        SwitchToOcrFallbackIfUiAutomation();
 
         reDrawTimer.Start();
     }
@@ -3211,7 +3225,7 @@ new GrabFrameOperationArgs()
             FreezeToggleButton.IsChecked = true;
             FreezeGrabFrame();
             FreezeToggleButton.Visibility = Visibility.Collapsed;
-            NotifyIfUiAutomationNeedsLiveSource(CurrentLanguage);
+            SwitchToOcrFallbackIfUiAutomation();
 
             reDrawTimer.Start();
         }

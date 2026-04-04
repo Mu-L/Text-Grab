@@ -12,7 +12,7 @@ namespace Text_Grab.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.14.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "18.4.0.0")]
     internal sealed partial class Settings : global::System.Configuration.ApplicationSettingsBase {
         
         private static Settings defaultInstance = ((Settings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new Settings())));
@@ -649,6 +649,18 @@ namespace Text_Grab.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Region")]
+        public string FsgSelectionStyle {
+            get {
+                return ((string)(this["FsgSelectionStyle"]));
+            }
+            set {
+                this["FsgSelectionStyle"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("True")]
         public bool FsgShadeOverlay {
             get {
@@ -782,6 +794,78 @@ namespace Text_Grab.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool EnableFileBackedManagedSettings {
+            get {
+                return ((bool)(this["EnableFileBackedManagedSettings"]));
+            }
+            set {
+                this["EnableFileBackedManagedSettings"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool UiAutomationEnabled {
+            get {
+                return ((bool)(this["UiAutomationEnabled"]));
+            }
+            set {
+                this["UiAutomationEnabled"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool UiAutomationFallbackToOcr {
+            get {
+                return ((bool)(this["UiAutomationFallbackToOcr"]));
+            }
+            set {
+                this["UiAutomationFallbackToOcr"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Balanced")]
+        public string UiAutomationTraversalMode {
+            get {
+                return ((string)(this["UiAutomationTraversalMode"]));
+            }
+            set {
+                this["UiAutomationTraversalMode"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool UiAutomationIncludeOffscreen {
+            get {
+                return ((bool)(this["UiAutomationIncludeOffscreen"]));
+            }
+            set {
+                this["UiAutomationIncludeOffscreen"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool UiAutomationPreferFocusedElement {
+            get {
+                return ((bool)(this["UiAutomationPreferFocusedElement"]));
+            }
+            set {
+                this["UiAutomationPreferFocusedElement"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool GrabFrameTranslationEnabled {
             get {
                 return ((bool)(this["GrabFrameTranslationEnabled"]));
@@ -836,6 +920,42 @@ namespace Text_Grab.Properties {
             }
             set {
                 this["PostGrabStayOpen"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string GrabTemplatesJSON {
+            get {
+                return ((string)(this["GrabTemplatesJSON"]));
+            }
+            set {
+                this["GrabTemplatesJSON"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool AddToContextMenu {
+            get {
+                return ((bool)(this["AddToContextMenu"]));
+            }
+            set {
+                this["AddToContextMenu"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool RegisterOpenWith {
+            get {
+                return ((bool)(this["RegisterOpenWith"]));
+            }
+            set {
+                this["RegisterOpenWith"] = value;
             }
         }
     }

@@ -24,6 +24,19 @@ public partial class WordBorder : UserControl, INotifyPropertyChanged
     public static readonly DependencyProperty WordProperty =
         DependencyProperty.Register("Word", typeof(string), typeof(WordBorder), new PropertyMetadata(""));
 
+    public static readonly DependencyProperty TemplateIndexProperty =
+        DependencyProperty.Register(nameof(TemplateIndex), typeof(int), typeof(WordBorder),
+            new PropertyMetadata(0, OnTemplateIndexChanged));
+
+    private static void OnTemplateIndexChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is WordBorder wb)
+        {
+            wb.PropertyChanged?.Invoke(wb, new PropertyChangedEventArgs(nameof(TemplateBadgeVisibility)));
+            wb.PropertyChanged?.Invoke(wb, new PropertyChangedEventArgs(nameof(TemplateBadgeText)));
+        }
+    }
+
     public static RoutedCommand MergeWordsCommand = new();
     private int contextMenuBaseSize;
     private SolidColorBrush contrastingForeground = new(Colors.White);
@@ -133,6 +146,16 @@ public partial class WordBorder : UserControl, INotifyPropertyChanged
         }
     }
 
+    public int TemplateIndex
+    {
+        get => (int)GetValue(TemplateIndexProperty);
+        set => SetValue(TemplateIndexProperty, value);
+    }
+
+    public Visibility TemplateBadgeVisibility => TemplateIndex > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public string TemplateBadgeText => TemplateIndex > 0 ? $"{{{TemplateIndex}}}" : string.Empty;
+
     public bool WasRegionSelected { get; set; } = false;
     public string Word
     {
@@ -151,7 +174,29 @@ public partial class WordBorder : UserControl, INotifyPropertyChanged
     public void Deselect()
     {
         IsSelected = false;
-        WordBorderBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(255, 48, 142, 152));
+        ApplyTemplateStateBorderBrush();
+    }
+
+    private bool _isInOutputPattern = false;
+
+    /// <summary>
+    /// Highlights the border orange when this region is referenced in the output template.
+    /// Call with false to restore the normal teal border color.
+    /// </summary>
+    public void SetHighlightedForOutput(bool isHighlighted)
+    {
+        _isInOutputPattern = isHighlighted;
+        if (!IsSelected)
+            ApplyTemplateStateBorderBrush();
+    }
+
+    private void ApplyTemplateStateBorderBrush()
+    {
+        SolidColorBrush brush = _isInOutputPattern
+            ? new SolidColorBrush(Colors.Orange)
+            : new SolidColorBrush(Color.FromRgb(48, 142, 152));
+        WordBorderBorder.BorderBrush = brush;
+        MoveResizeBorder.BorderBrush = brush;
     }
 
     public void EnterEdit()
@@ -437,8 +482,12 @@ public partial class WordBorder : UserControl, INotifyPropertyChanged
 
             if (!WindowsAiUtilities.CanDeviceUseWinAI())
             {
-                MessageBox.Show("Windows AI is not available on this device.", 
-                    "Translation Not Available", MessageBoxButton.OK, MessageBoxImage.Information);
+                await new Wpf.Ui.Controls.MessageBox
+                {
+                    Title = "Translation Not Available",
+                    Content = "Windows AI is not available on this device.",
+                    CloseButtonText = "OK"
+                }.ShowDialogAsync();
                 return;
             }
 
@@ -468,8 +517,12 @@ public partial class WordBorder : UserControl, INotifyPropertyChanged
             catch (Exception ex)
             {
                 Debug.WriteLine($"Translation failed: {ex.Message}");
-                MessageBox.Show($"Translation failed: {ex.Message}", 
-                    "Translation Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                await new Wpf.Ui.Controls.MessageBox
+                {
+                    Title = "Translation Error",
+                    Content = $"Translation failed: {ex.Message}",
+                    CloseButtonText = "OK"
+                }.ShowDialogAsync();
             }
         }
 

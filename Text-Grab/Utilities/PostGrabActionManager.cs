@@ -2,20 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text.Json;
 using System.Threading.Tasks;
+using System.Windows;
+using Text_Grab.Interfaces;
 using Text_Grab.Models;
-using Text_Grab.Properties;
 using Wpf.Ui.Controls;
 
 namespace Text_Grab.Utilities;
 
 public class PostGrabActionManager
 {
-    private static readonly Settings DefaultSettings = AppUtilities.TextGrabSettings;
-
     /// <summary>
-    /// Gets all available post-grab actions from ButtonInfo.AllButtons filtered for FullscreenGrab relevance
+    /// Gets all available post-grab actions from ButtonInfo.AllButtons filtered for FullscreenGrab relevance.
+    /// Also includes a ButtonInfo for each saved Grab Template.
     /// </summary>
     public static List<ButtonInfo> GetAvailablePostGrabActions()
     {
@@ -24,8 +23,18 @@ public class PostGrabActionManager
         // Add other relevant actions from AllButtons that are marked as relevant for FullscreenGrab
         IEnumerable<ButtonInfo> relevantActions = ButtonInfo.AllButtons
             .Where(button => button.IsRelevantForFullscreenGrab && !allPostGrabActions.Any(b => b.ButtonText == button.ButtonText));
-        
+
         allPostGrabActions.AddRange(relevantActions);
+
+        // Add a ButtonInfo for each saved Grab Template
+        List<GrabTemplate> templates = GrabTemplateManager.GetAllTemplates();
+        foreach (GrabTemplate template in templates)
+        {
+            ButtonInfo templateAction = GrabTemplateManager.CreateButtonInfoForTemplate(template);
+            // Avoid duplicates if it's somehow already in the list
+            if (!allPostGrabActions.Any(b => b.TemplateId == template.Id))
+                allPostGrabActions.Add(templateAction);
+        }
 
         return [.. allPostGrabActions.OrderBy(b => b.OrderNumber)];
     }
@@ -100,23 +109,11 @@ public class PostGrabActionManager
     /// </summary>
     public static List<ButtonInfo> GetEnabledPostGrabActions()
     {
-        string json = DefaultSettings.PostGrabJSON;
-
-        if (string.IsNullOrWhiteSpace(json))
+        List<ButtonInfo> customActions = AppUtilities.TextGrabSettingsService.LoadPostGrabActions();
+        if (customActions.Count == 0)
             return GetDefaultPostGrabActions();
 
-        try
-        {
-            List<ButtonInfo>? customActions = JsonSerializer.Deserialize<List<ButtonInfo>>(json);
-            if (customActions is not null && customActions.Count > 0)
-                return customActions;
-        }
-        catch (JsonException)
-        {
-            // If deserialization fails, return defaults
-        }
-
-        return GetDefaultPostGrabActions();
+        return customActions;
     }
 
     /// <summary>
@@ -124,9 +121,7 @@ public class PostGrabActionManager
     /// </summary>
     public static void SavePostGrabActions(List<ButtonInfo> actions)
     {
-        string json = JsonSerializer.Serialize(actions);
-        DefaultSettings.PostGrabJSON = json;
-        DefaultSettings.Save();
+        AppUtilities.TextGrabSettingsService.SavePostGrabActions(actions);
     }
 
     /// <summary>
@@ -135,25 +130,13 @@ public class PostGrabActionManager
     public static bool GetCheckState(ButtonInfo action)
     {
         // First check if there's a stored check state from last usage
-        string statesJson = DefaultSettings.PostGrabCheckStates;
-
-        if (!string.IsNullOrWhiteSpace(statesJson))
+        Dictionary<string, bool> checkStates = AppUtilities.TextGrabSettingsService.LoadPostGrabCheckStates();
+        if (checkStates.Count > 0
+            && checkStates.TryGetValue(action.ButtonText, out bool storedState)
+            && action.DefaultCheckState == DefaultCheckState.LastUsed)
         {
-            try
-            {
-                Dictionary<string, bool>? checkStates = JsonSerializer.Deserialize<Dictionary<string, bool>>(statesJson);
-                if (checkStates is not null 
-                    && checkStates.TryGetValue(action.ButtonText, out bool storedState)
-                    && action.DefaultCheckState == DefaultCheckState.LastUsed)
-                {
-                    // If the action is set to LastUsed, use the stored state
-                    return storedState;
-                }
-            }
-            catch (JsonException)
-            {
-                // If deserialization fails, fall through to default behavior
-            }
+            // If the action is set to LastUsed, use the stored state
+            return storedState;
         }
 
         // Otherwise use the default check state
@@ -165,25 +148,9 @@ public class PostGrabActionManager
     /// </summary>
     public static void SaveCheckState(ButtonInfo action, bool isChecked)
     {
-        string statesJson = DefaultSettings.PostGrabCheckStates;
-        Dictionary<string, bool> checkStates = [];
-
-        if (!string.IsNullOrWhiteSpace(statesJson))
-        {
-            try
-            {
-                checkStates = JsonSerializer.Deserialize<Dictionary<string, bool>>(statesJson) ?? [];
-            }
-            catch (JsonException)
-            {
-                // Start fresh if deserialization fails
-            }
-        }
-
+        Dictionary<string, bool> checkStates = AppUtilities.TextGrabSettingsService.LoadPostGrabCheckStates();
         checkStates[action.ButtonText] = isChecked;
-        string updatedJson = JsonSerializer.Serialize(checkStates);
-        DefaultSettings.PostGrabCheckStates = updatedJson;
-        DefaultSettings.Save();
+        AppUtilities.TextGrabSettingsService.SavePostGrabCheckStates(checkStates);
     }
 
     /// <summary>
@@ -191,6 +158,16 @@ public class PostGrabActionManager
     /// </summary>
     public static async Task<string> ExecutePostGrabAction(ButtonInfo action, string text)
     {
+        return await ExecutePostGrabAction(action, PostGrabContext.TextOnly(text));
+    }
+
+    /// <summary>
+    /// Executes a post-grab action using the full <see cref="PostGrabContext"/>.
+    /// Template actions use the context's CaptureRegion and DpiScale to re-OCR sub-regions.
+    /// </summary>
+    public static async Task<string> ExecutePostGrabAction(ButtonInfo action, PostGrabContext context)
+    {
+        string text = context.Text;
         string result = text;
 
         switch (action.ClickEvent)
@@ -234,6 +211,21 @@ public class PostGrabActionManager
                     string systemLanguage = LanguageUtilities.GetSystemLanguageForTranslation();
                     result = await WindowsAiUtilities.TranslateText(text, systemLanguage);
                 }
+                break;
+
+            case "ApplyTemplate_Click":
+                if (!string.IsNullOrWhiteSpace(action.TemplateId)
+                    && context.CaptureRegion != Rect.Empty)
+                {
+                    GrabTemplate? template = GrabTemplateManager.GetTemplateById(action.TemplateId);
+                    if (template is not null)
+                    {
+                        result = await GrabTemplateExecutor.ExecuteTemplateAsync(
+                            template, context.CaptureRegion, context.Language);
+                        GrabTemplateManager.RecordUsage(action.TemplateId);
+                    }
+                }
+                // If no capture region (e.g. called from EditTextWindow), skip template
                 break;
 
             default:

@@ -22,6 +22,7 @@ namespace Text_Grab.Pages;
 public partial class LanguageSettings : Page
 {
     private readonly Settings DefaultSettings = AppUtilities.TextGrabSettings;
+    private bool loadingUiAutomationSettings = false;
 
 
     public LanguageSettings()
@@ -31,9 +32,12 @@ public partial class LanguageSettings : Page
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
+        loadingUiAutomationSettings = true;
+
         LoadAiStatus();
 
         LoadWindowsLanguages();
+        LoadUiAutomationSettings();
 
         if (DefaultSettings.UseTesseract)
         {
@@ -44,6 +48,8 @@ public partial class LanguageSettings : Page
         {
             TesseractLanguagesStackPanel.Visibility = Visibility.Collapsed;
         }
+
+        loadingUiAutomationSettings = false;
     }
 
     private void LoadAiStatus()
@@ -116,6 +122,22 @@ public partial class LanguageSettings : Page
         }
     }
 
+    private void LoadUiAutomationSettings()
+    {
+        UiAutomationEnabledToggle.IsChecked = DefaultSettings.UiAutomationEnabled;
+        UiAutomationFallbackToggle.IsChecked = DefaultSettings.UiAutomationFallbackToOcr;
+        UiAutomationIncludeOffscreenToggle.IsChecked = DefaultSettings.UiAutomationIncludeOffscreen;
+        UiAutomationPreferFocusedToggle.IsChecked = DefaultSettings.UiAutomationPreferFocusedElement;
+
+        UiAutomationTraversalModeComboBox.ItemsSource = Enum.GetValues<UiAutomationTraversalMode>();
+        if (Enum.TryParse(DefaultSettings.UiAutomationTraversalMode, true, out UiAutomationTraversalMode traversalMode))
+            UiAutomationTraversalModeComboBox.SelectedItem = traversalMode;
+        else
+            UiAutomationTraversalModeComboBox.SelectedItem = UiAutomationTraversalMode.Balanced;
+
+        UpdateUiAutomationControlState();
+    }
+
     private async void InstallButton_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(AllLanguagesComboBox.Text))
@@ -139,6 +161,61 @@ public partial class LanguageSettings : Page
     private void HyperlinkButton_Click(object sender, RoutedEventArgs e)
     {
 
+    }
+
+    private void UiAutomationEnabledToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (loadingUiAutomationSettings)
+            return;
+
+        DefaultSettings.UiAutomationEnabled = UiAutomationEnabledToggle.IsChecked is true;
+        DefaultSettings.Save();
+        LanguageUtilities.InvalidateAllCaches();
+        UpdateUiAutomationControlState();
+    }
+
+    private void UiAutomationFallbackToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (loadingUiAutomationSettings)
+            return;
+
+        DefaultSettings.UiAutomationFallbackToOcr = UiAutomationFallbackToggle.IsChecked is true;
+        DefaultSettings.Save();
+    }
+
+    private void UiAutomationPreferFocusedToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (loadingUiAutomationSettings)
+            return;
+
+        DefaultSettings.UiAutomationPreferFocusedElement = UiAutomationPreferFocusedToggle.IsChecked is true;
+        DefaultSettings.Save();
+    }
+
+    private void UiAutomationIncludeOffscreenToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (loadingUiAutomationSettings)
+            return;
+
+        DefaultSettings.UiAutomationIncludeOffscreen = UiAutomationIncludeOffscreenToggle.IsChecked is true;
+        DefaultSettings.Save();
+    }
+
+    private void UiAutomationTraversalModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (loadingUiAutomationSettings
+            || UiAutomationTraversalModeComboBox.SelectedItem is not UiAutomationTraversalMode traversalMode)
+            return;
+
+        DefaultSettings.UiAutomationTraversalMode = traversalMode.ToString();
+        DefaultSettings.Save();
+    }
+
+    private void UpdateUiAutomationControlState()
+    {
+        UiAutomationAdvancedOptionsPanel.Visibility = DefaultSettings.UiAutomationEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     public async Task CopyFileWithElevatedPermissions(string sourcePath, string destinationPath)
@@ -178,7 +255,12 @@ public partial class LanguageSettings : Page
         {
             // The user refused the elevation.
             // Handle this situation as you prefer.
-            MessageBox.Show(ex.Message);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Error",
+                Content = ex.Message,
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
     }
 

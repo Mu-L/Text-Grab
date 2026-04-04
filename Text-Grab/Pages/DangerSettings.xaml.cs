@@ -2,6 +2,7 @@
 using Microsoft.Win32;
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using Text_Grab.Properties;
 using Text_Grab.Services;
@@ -15,6 +16,7 @@ namespace Text_Grab.Pages;
 public partial class DangerSettings : System.Windows.Controls.Page
 {
     private readonly Settings DefaultSettings = AppUtilities.TextGrabSettings;
+    private bool _loadingDangerSettings;
 
     public DangerSettings()
     {
@@ -23,7 +25,10 @@ public partial class DangerSettings : System.Windows.Controls.Page
 
     private void Page_Loaded(object sender, RoutedEventArgs e)
     {
+        _loadingDangerSettings = true;
         OverrideArchCheckWinAI.IsChecked = DefaultSettings.OverrideAiArchCheck;
+        EnableFileBackedManagedSettingsToggle.IsChecked = DefaultSettings.EnableFileBackedManagedSettings;
+        _loadingDangerSettings = false;
     }
 
     private async void ExportBugReportButton_Click(object sender, RoutedEventArgs e)
@@ -93,6 +98,11 @@ public partial class DangerSettings : System.Windows.Controls.Page
 
     private async void ExportSettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        await ExportSettingsAsync();
+    }
+
+    private async Task ExportSettingsAsync()
+    {
         try
         {
             bool includeHistory = IncludeHistoryCheckBox.IsChecked ?? false;
@@ -121,6 +131,11 @@ public partial class DangerSettings : System.Windows.Controls.Page
                 CloseButtonText = "OK"
             }.ShowDialogAsync();
         }
+    }
+
+    private async void BackupSettingsHyperlink_Click(object sender, RoutedEventArgs e)
+    {
+        await ExportSettingsAsync();
     }
 
     private async void ImportSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -192,5 +207,29 @@ public partial class DangerSettings : System.Windows.Controls.Page
 
         DefaultSettings.OverrideAiArchCheck = ts.IsChecked ?? false;
         DefaultSettings.Save();
+    }
+
+    private async void EnableFileBackedManagedSettingsToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loadingDangerSettings)
+            return;
+
+        bool isEnabled = EnableFileBackedManagedSettingsToggle.IsChecked is true;
+        if (DefaultSettings.EnableFileBackedManagedSettings == isEnabled)
+            return;
+
+        DefaultSettings.EnableFileBackedManagedSettings = isEnabled;
+        DefaultSettings.Save();
+
+        string message = isEnabled
+            ? "Experimental file-backed settings storage will be preferred after you restart Text Grab. Restart is required because Text Grab applies this storage preference when it starts so it can safely keep the legacy strings and file-backed copies in sync. Backup your settings before using it if you have not already."
+            : "Legacy settings storage will be preferred again after you restart Text Grab.";
+
+        await new Wpf.Ui.Controls.MessageBox
+        {
+            Title = "Restart Required",
+            Content = message,
+            CloseButtonText = "OK"
+        }.ShowDialogAsync();
     }
 }

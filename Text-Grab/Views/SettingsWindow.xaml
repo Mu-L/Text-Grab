@@ -67,6 +67,7 @@
                         <ui:SymbolIcon Symbol="Home24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+
                 <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:FullscreenGrabSettings}">
                     <ui:NavigationViewItem.Content>
                         <TextBlock Style="{StaticResource NavMenuContent}" TextWrapping="Wrap">
@@ -79,6 +80,44 @@
                         <ui:SymbolIcon Symbol="SlideAdd24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+
+                <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:GrabFrameSettings}">
+                    <ui:NavigationViewItem.Content>
+                        <TextBlock Style="{StaticResource NavMenuContent}" TextWrapping="Wrap">
+                            <Run>Grab Frame</Run>
+                        </TextBlock>
+                    </ui:NavigationViewItem.Content>
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="PanelBottom20" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+
+                <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:QuickLookupSettings}">
+                    <ui:NavigationViewItem.Content>
+                        <TextBlock Style="{StaticResource NavMenuContent}" TextWrapping="Wrap">
+                            <Run>Quick Simple</Run>
+                            <LineBreak />
+                            <Run>Lookup</Run>
+                        </TextBlock>
+                    </ui:NavigationViewItem.Content>
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="SlideSearch20" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+
+                <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:EditTextWindowSettings}">
+                    <ui:NavigationViewItem.Content>
+                        <TextBlock Style="{StaticResource NavMenuContent}" TextWrapping="Wrap">
+                            <Run>Edit Text</Run>
+                            <LineBreak />
+                            <Run>Window</Run>
+                        </TextBlock>
+                    </ui:NavigationViewItem.Content>
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Window20" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+
                 <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:LanguageSettings}">
                     <ui:NavigationViewItem.Content>
                         <TextBlock
@@ -90,6 +129,7 @@
                         <ui:SymbolIcon Symbol="LocalLanguage24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+
                 <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:KeysSettings}">
                     <ui:NavigationViewItem.Content>
                         <TextBlock Style="{StaticResource NavMenuContent}" TextWrapping="Wrap">
@@ -102,6 +142,7 @@
                         <ui:SymbolIcon Symbol="DesktopKeyboard24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+
                 <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:TesseractSettings}">
                     <ui:NavigationViewItem.Content>
                         <TextBlock
@@ -113,8 +154,10 @@
                         <ui:SymbolIcon Symbol="Globe24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+
             </ui:NavigationView.MenuItems>
-            <ui:NavigationView.FooterMenuItems>F
+
+            <ui:NavigationView.FooterMenuItems>
                 <ui:NavigationViewItem NavigationCacheMode="Enabled" TargetPageType="{x:Type pages:DangerSettings}">
                     <ui:NavigationViewItem.Content>
                         <TextBlock

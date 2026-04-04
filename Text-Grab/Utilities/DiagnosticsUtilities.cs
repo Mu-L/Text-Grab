@@ -27,6 +27,7 @@ public static class DiagnosticsUtilities
             WindowsVersion = GetWindowsVersion(),
             StartupDetails = GetStartupDetails(),
             SettingsInfo = GetSettingsInfo(),
+            ManagedSettingsSummary = GetManagedSettingsSummary(),
             HistoryInfo = GetHistoryInfo(),
             LanguageInfo = GetLanguageInfo(),
             TesseractInfo = await GetTesseractInfoAsync(),
@@ -97,33 +98,37 @@ public static class DiagnosticsUtilities
         StartupDetailsModel details = new()
         {
             IsPackaged = AppUtilities.IsPackaged(),
-            BaseDirectory = AppContext.BaseDirectory,
-            ExecutablePath = Environment.ProcessPath ?? "Unknown"
+            // Sanitize: only include the executable filename, not the full path (which contains username)
+            ExecutableFileName = Path.GetFileName(Environment.ProcessPath ?? "Text-Grab.exe")
         };
 
         if (AppUtilities.IsPackaged())
         {
             details.StartupMethod = "StartupTask API (packaged apps)";
             details.RegistryPath = "N/A (uses StartupTask)";
-            details.RegistryValue = "N/A (uses StartupTask)";
+            details.RegistryValueStatus = "N/A (uses StartupTask)";
         }
         else
         {
             details.StartupMethod = "Registry Run key (unpackaged apps)";
             details.RegistryPath = @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
 
-            string exeName = Path.GetFileName(Environment.ProcessPath ?? "Text-Grab.exe");
-            string executablePath = FileUtilities.GetExePath();
-            details.CalculatedRegistryValue = $"{executablePath}";
-
             try
             {
                 using RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run");
-                details.ActualRegistryValue = key?.GetValue("Text-Grab")?.ToString() ?? "Not set";
+                string? actualValue = key?.GetValue("Text-Grab")?.ToString();
+                string expectedExeName = Path.GetFileName(FileUtilities.GetExePath());
+
+                if (actualValue is null)
+                    details.RegistryValueStatus = "Not set";
+                else if (Path.GetFileName(actualValue.Trim('"')) == expectedExeName)
+                    details.RegistryValueStatus = "Configured correctly";
+                else
+                    details.RegistryValueStatus = "Mismatch (points to different executable)";
             }
             catch (Exception ex)
             {
-                details.ActualRegistryValue = $"Error reading registry: {ex.Message}";
+                details.RegistryValueStatus = $"Error reading registry: {ex.Message}";
             }
         }
 
@@ -132,27 +137,158 @@ public static class DiagnosticsUtilities
 
     private static SettingsInfoModel GetSettingsInfo()
     {
-        Settings settings = AppUtilities.TextGrabSettings;
+        Settings s = AppUtilities.TextGrabSettings;
 
         return new SettingsInfoModel
         {
-            FirstRun = settings.FirstRun,
-            ShowToast = settings.ShowToast,
-            StartupOnLogin = settings.StartupOnLogin,
-            RunInBackground = settings.RunInTheBackground,
-            GlobalHotkeysEnabled = settings.GlobalHotkeysEnabled,
-            TryToReadBarcodes = false,
-            CorrectErrors = settings.CorrectErrors,
-            CorrectToLatin = false,
-            UseTesseract = settings.UseTesseract,
+            // Core behavior
+            FirstRun = s.FirstRun,
+            ShowToast = s.ShowToast,
+            StartupOnLogin = s.StartupOnLogin,
+            RunInBackground = s.RunInTheBackground,
+            NeverAutoUseClipboard = s.NeverAutoUseClipboard,
+            UseHistory = s.UseHistory,
+            AddToContextMenu = s.AddToContextMenu,
+            RegisterOpenWith = s.RegisterOpenWith,
+
+            // Grab behavior
+            DefaultLaunch = s.DefaultLaunch ?? "Unknown",
+            TryInsert = s.TryInsert,
+            InsertDelay = s.InsertDelay,
+            CloseFrameOnGrab = s.CloseFrameOnGrab,
+            PostGrabStayOpen = s.PostGrabStayOpen,
+
+            // OCR / error correction
+            CorrectErrors = s.CorrectErrors,
+            CorrectToLatin = s.CorrectToLatin,
+            TryToReadBarcodes = s.TryToReadBarcodes,
+            UseTesseract = s.UseTesseract,
+            TesseractPathConfigured = !string.IsNullOrWhiteSpace(s.TesseractPath),
             WindowsAiAvailable = WindowsAiUtilities.CanDeviceUseWinAI(),
-            DefaultLaunch = settings.DefaultLaunch?.ToString() ?? "Unknown",
-            DefaultLanguage = "Not configured in settings",
-            TesseractPath = settings.TesseractPath ?? string.Empty,
-            NeverAutoUseClipboard = settings.NeverAutoUseClipboard,
-            FontFamilySetting = settings.FontFamilySetting ?? "Default",
-            IsFontBold = settings.IsFontBold,
+            LastUsedLang = s.LastUsedLang ?? string.Empty,
+
+            // Global hotkeys
+            GlobalHotkeysEnabled = s.GlobalHotkeysEnabled,
+            FullscreenGrabHotKey = s.FullscreenGrabHotKey ?? string.Empty,
+            GrabFrameHotkey = s.GrabFrameHotkey ?? string.Empty,
+            EditWindowHotKey = s.EditWindowHotKey ?? string.Empty,
+            LookupHotKey = s.LookupHotKey ?? string.Empty,
+
+            // Lookup tool
+            LookupSearchHistory = s.LookupSearchHistory,
+            LookupFileConfigured = !string.IsNullOrWhiteSpace(s.LookupFileLocation),
+
+            // Display / font
+            AppTheme = s.AppTheme ?? "System",
+            FontFamilySetting = s.FontFamilySetting ?? "Default",
+            FontSizeSetting = s.FontSizeSetting,
+            IsFontBold = s.IsFontBold,
+            IsFontItalic = s.IsFontItalic,
+            IsFontUnderline = s.IsFontUnderline,
+            IsFontStrikeout = s.IsFontStrikeout,
+
+            // Grab Frame
+            GrabFrameAutoOcr = s.GrabFrameAutoOcr,
+            GrabFrameUpdateEtw = s.GrabFrameUpdateEtw,
+            GrabFrameScrollBehavior = s.GrabFrameScrollBehavior ?? string.Empty,
+            GrabFrameReadBarcodes = s.GrabFrameReadBarcodes,
+            GrabFrameTranslationEnabled = s.GrabFrameTranslationEnabled,
+            GrabFrameTranslationLanguage = s.GrabFrameTranslationLanguage ?? string.Empty,
+
+            // Fullscreen grab
+            FSGMakeSingleLineToggle = s.FSGMakeSingleLineToggle,
+            FsgDefaultMode = s.FsgDefaultMode ?? string.Empty,
+            FsgSelectionStyle = s.FsgSelectionStyle ?? string.Empty,
+            FsgShadeOverlay = s.FsgShadeOverlay,
+            FsgSendEtwToggle = s.FsgSendEtwToggle,
+
+            // Edit Text Window
+            EditWindowIsWordWrapOn = s.EditWindowIsWordWrapOn,
+            EditWindowIsOnTop = s.EditWindowIsOnTop,
+            EditWindowBottomBarIsHidden = s.EditWindowBottomBarIsHidden,
+            EditWindowStartFullscreen = s.EditWindowStartFullscreen,
+            RestoreEtwPositions = s.RestoreEtwPositions,
+            EtwUseMargins = s.EtwUseMargins,
+            ShowCursorText = s.ShowCursorText,
+            ScrollBottomBar = s.ScrollBottomBar,
+            EtwShowLangPicker = s.EtwShowLangPicker,
+            EtwShowWordCount = s.EtwShowWordCount,
+            EtwShowCharDetails = s.EtwShowCharDetails,
+            EtwShowMatchCount = s.EtwShowMatchCount,
+            EtwShowRegexPattern = s.EtwShowRegexPattern,
+            EtwShowSimilarMatches = s.EtwShowSimilarMatches,
+
+            // Calculator pane
+            CalcShowErrors = s.CalcShowErrors,
+            CalcShowPane = s.CalcShowPane,
+            CalcPaneWidth = s.CalcPaneWidth,
+
+            // Web search (name only, not URLs)
+            DefaultWebSearch = s.DefaultWebSearch ?? string.Empty,
+
+            // UI Automation
+            UiAutomationEnabled = s.UiAutomationEnabled,
+            UiAutomationFallbackToOcr = s.UiAutomationFallbackToOcr,
+            UiAutomationTraversalMode = s.UiAutomationTraversalMode ?? string.Empty,
+            UiAutomationIncludeOffscreen = s.UiAutomationIncludeOffscreen,
+            UiAutomationPreferFocusedElement = s.UiAutomationPreferFocusedElement,
+
+            // Advanced
+            OverrideAiArchCheck = s.OverrideAiArchCheck,
+            EnableFileBackedManagedSettings = s.EnableFileBackedManagedSettings,
         };
+    }
+
+    private static ManagedSettingsSummaryModel GetManagedSettingsSummary()
+    {
+        try
+        {
+            SettingsService svc = AppUtilities.TextGrabSettingsService;
+
+            StoredRegex[] regexes = svc.LoadStoredRegexes();
+            StoredRegex[] customRegexes = regexes.Where(r => !r.IsDefault).ToArray();
+
+            List<Models.ButtonInfo> postGrabActions = svc.LoadPostGrabActions();
+            Dictionary<string, bool> postGrabCheckStates = svc.LoadPostGrabCheckStates();
+            int enabledPostGrabCount = postGrabCheckStates.Values.Count(v => v);
+
+            List<Models.ShortcutKeySet> shortcuts = svc.LoadShortcutKeySets();
+            int enabledShortcutCount = shortcuts.Count(s => s.IsEnabled);
+
+            List<Models.ButtonInfo> bottomButtons = svc.LoadBottomBarButtons();
+
+            List<Models.WebSearchUrlModel> webSearchUrls = svc.LoadWebSearchUrls();
+
+            List<GrabTemplate> templates = GrabTemplateManager.GetAllTemplates();
+
+            return new ManagedSettingsSummaryModel
+            {
+                RegexPatternCount = regexes.Length,
+                RegexDefaultPatternCount = regexes.Length - customRegexes.Length,
+                RegexCustomPatternCount = customRegexes.Length,
+                RegexCustomPatternNames = [.. customRegexes.Select(r => r.Name)],
+
+                PostGrabActionCount = postGrabActions.Count,
+                PostGrabActionNames = [.. postGrabActions.Select(a => a.ButtonText)],
+                PostGrabEnabledCount = enabledPostGrabCount,
+
+                ShortcutKeySetCount = shortcuts.Count,
+                EnabledShortcutKeySetCount = enabledShortcutCount,
+
+                BottomBarButtonCount = bottomButtons.Count,
+
+                WebSearchUrlCount = webSearchUrls.Count,
+
+                GrabTemplateCount = templates.Count,
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ManagedSettingsSummaryModel
+            {
+                ErrorMessage = $"Error reading managed settings: {ex.Message}"
+            };
+        }
     }
 
     private static HistoryInfoModel GetHistoryInfo()
@@ -266,7 +402,7 @@ public static class DiagnosticsUtilities
             return new TesseractInfoModel
             {
                 IsInstalled = canLocate,
-                ExecutablePath = canLocate ? "Located (path private)" : "Not found",
+                ExecutablePath = canLocate ? "Located (path redacted)" : "Not found",
                 Version = "Version info not publicly available",
                 AvailableLanguages = availableLanguages,
                 ConfiguredLanguages = ["Will be populated from Tesseract installation"]
@@ -333,6 +469,7 @@ public class BugReportModel
     public string WindowsVersion { get; set; } = string.Empty;
     public StartupDetailsModel StartupDetails { get; set; } = new();
     public SettingsInfoModel SettingsInfo { get; set; } = new();
+    public ManagedSettingsSummaryModel ManagedSettingsSummary { get; set; } = new();
     public HistoryInfoModel HistoryInfo { get; set; } = new();
     public LanguageInfoModel LanguageInfo { get; set; } = new();
     public TesseractInfoModel TesseractInfo { get; set; } = new();
@@ -343,32 +480,139 @@ public class StartupDetailsModel
 {
     public bool IsPackaged { get; set; }
     public string StartupMethod { get; set; } = string.Empty;
-    public string BaseDirectory { get; set; } = string.Empty;
-    public string ExecutablePath { get; set; } = string.Empty;
+    // Full paths are redacted to avoid exposing the local username/directory structure
+    public string ExecutableFileName { get; set; } = string.Empty;
     public string RegistryPath { get; set; } = string.Empty;
-    public string CalculatedRegistryValue { get; set; } = string.Empty;
-    public string ActualRegistryValue { get; set; } = string.Empty;
-    public string RegistryValue { get; set; } = string.Empty;
+    public string RegistryValueStatus { get; set; } = string.Empty;
 }
 
 public class SettingsInfoModel
 {
+    // Core behavior
     public bool FirstRun { get; set; }
     public bool ShowToast { get; set; }
     public bool StartupOnLogin { get; set; }
     public bool RunInBackground { get; set; }
-    public bool GlobalHotkeysEnabled { get; set; }
-    public bool TryToReadBarcodes { get; set; }
+    public bool NeverAutoUseClipboard { get; set; }
+    public bool UseHistory { get; set; }
+    public bool AddToContextMenu { get; set; }
+    public bool RegisterOpenWith { get; set; }
+
+    // Grab behavior
+    public string DefaultLaunch { get; set; } = string.Empty;
+    public bool TryInsert { get; set; }
+    public double InsertDelay { get; set; }
+    public bool CloseFrameOnGrab { get; set; }
+    public bool PostGrabStayOpen { get; set; }
+
+    // OCR / error correction
     public bool CorrectErrors { get; set; }
     public bool CorrectToLatin { get; set; }
+    public bool TryToReadBarcodes { get; set; }
     public bool UseTesseract { get; set; }
+    public bool TesseractPathConfigured { get; set; }  // true/false only — full path is PII
     public bool WindowsAiAvailable { get; set; }
-    public string DefaultLaunch { get; set; } = string.Empty;
-    public string DefaultLanguage { get; set; } = string.Empty;
-    public string TesseractPath { get; set; } = string.Empty;
-    public bool NeverAutoUseClipboard { get; set; }
+    public string LastUsedLang { get; set; } = string.Empty;
+
+    // Global hotkeys
+    public bool GlobalHotkeysEnabled { get; set; }
+    public string FullscreenGrabHotKey { get; set; } = string.Empty;
+    public string GrabFrameHotkey { get; set; } = string.Empty;
+    public string EditWindowHotKey { get; set; } = string.Empty;
+    public string LookupHotKey { get; set; } = string.Empty;
+
+    // Lookup tool
+    public bool LookupSearchHistory { get; set; }
+    public bool LookupFileConfigured { get; set; }  // true/false only — full path is PII
+
+    // Display / font
+    public string AppTheme { get; set; } = string.Empty;
     public string FontFamilySetting { get; set; } = string.Empty;
+    public double FontSizeSetting { get; set; }
     public bool IsFontBold { get; set; }
+    public bool IsFontItalic { get; set; }
+    public bool IsFontUnderline { get; set; }
+    public bool IsFontStrikeout { get; set; }
+
+    // Grab Frame
+    public bool GrabFrameAutoOcr { get; set; }
+    public bool GrabFrameUpdateEtw { get; set; }
+    public string GrabFrameScrollBehavior { get; set; } = string.Empty;
+    public bool GrabFrameReadBarcodes { get; set; }
+    public bool GrabFrameTranslationEnabled { get; set; }
+    public string GrabFrameTranslationLanguage { get; set; } = string.Empty;
+
+    // Fullscreen grab
+    public bool FSGMakeSingleLineToggle { get; set; }
+    public string FsgDefaultMode { get; set; } = string.Empty;
+    public string FsgSelectionStyle { get; set; } = string.Empty;
+    public bool FsgShadeOverlay { get; set; }
+    public bool FsgSendEtwToggle { get; set; }
+
+    // Edit Text Window
+    public bool EditWindowIsWordWrapOn { get; set; }
+    public bool EditWindowIsOnTop { get; set; }
+    public bool EditWindowBottomBarIsHidden { get; set; }
+    public bool EditWindowStartFullscreen { get; set; }
+    public bool RestoreEtwPositions { get; set; }
+    public bool EtwUseMargins { get; set; }
+    public bool ShowCursorText { get; set; }
+    public bool ScrollBottomBar { get; set; }
+    public bool EtwShowLangPicker { get; set; }
+    public bool EtwShowWordCount { get; set; }
+    public bool EtwShowCharDetails { get; set; }
+    public bool EtwShowMatchCount { get; set; }
+    public bool EtwShowRegexPattern { get; set; }
+    public bool EtwShowSimilarMatches { get; set; }
+
+    // Calculator pane
+    public bool CalcShowErrors { get; set; }
+    public bool CalcShowPane { get; set; }
+    public int CalcPaneWidth { get; set; }
+
+    // Web search (name of default search only — URLs are not included)
+    public string DefaultWebSearch { get; set; } = string.Empty;
+
+    // UI Automation
+    public bool UiAutomationEnabled { get; set; }
+    public bool UiAutomationFallbackToOcr { get; set; }
+    public string UiAutomationTraversalMode { get; set; } = string.Empty;
+    public bool UiAutomationIncludeOffscreen { get; set; }
+    public bool UiAutomationPreferFocusedElement { get; set; }
+
+    // Advanced
+    public bool OverrideAiArchCheck { get; set; }
+    public bool EnableFileBackedManagedSettings { get; set; }
+}
+
+public class ManagedSettingsSummaryModel
+{
+    // Regex patterns
+    public int RegexPatternCount { get; set; }
+    public int RegexDefaultPatternCount { get; set; }
+    public int RegexCustomPatternCount { get; set; }
+    // Names only — actual pattern strings are omitted as they may reveal sensitive data domains
+    public List<string> RegexCustomPatternNames { get; set; } = [];
+
+    // Post-grab actions
+    public int PostGrabActionCount { get; set; }
+    public List<string> PostGrabActionNames { get; set; } = [];
+    public int PostGrabEnabledCount { get; set; }
+
+    // Shortcut key sets
+    public int ShortcutKeySetCount { get; set; }
+    public int EnabledShortcutKeySetCount { get; set; }
+
+    // Bottom bar buttons
+    public int BottomBarButtonCount { get; set; }
+
+    // Web search URLs (count only — URLs are not included as they may reveal research interests)
+    public int WebSearchUrlCount { get; set; }
+
+    // Grab templates
+    public int GrabTemplateCount { get; set; }
+
+    public string? ErrorMessage { get; set; }
 }
 
 public class HistoryInfoModel

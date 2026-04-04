@@ -457,6 +457,14 @@
                         Click="GrabFrameMenuItem_Click"
                         Header="New _Grab Frame"
                         InputGestureText="Ctrl + G" />
+                    <MenuItem
+                        x:Name="ManageGrabTemplatesMenuItem"
+                        Click="ManageGrabTemplates_Click"
+                        Header="Manage Grab _Templates..." />
+                    <MenuItem
+                        x:Name="RegexManagerMenuItem"
+                        Click="RegexManagerMenuItem_Click"
+                        Header="Open _Regex Manager..." />
                     <Separator />
                     <MenuItem
                         x:Name="QuickSimpleLookupMenuItem"
@@ -479,6 +487,9 @@
                         Click="ReadFolderOfImages_Click"
                         Header="_Extract Text from Images in Folder..." />
                     <MenuItem x:Name="LanguageMenuItem" Header="OCR in Language..." />
+                    <MenuItem
+                        x:Name="GrabTemplateMenuItem"
+                        Header="Use Grab _Template..." />
                     <MenuItem
                         x:Name="RecursiveFoldersCheck"
                         Header="Scan all folders recursively"
@@ -811,10 +822,16 @@
                         <TextBlock Margin="0,0,0,4" TextWrapping="Wrap">
                             <Run Text="• Constants: pi, e, tau, phi, sqrt2, sqrt3, sqrt5, ln2, ln10, log2e, log10e" />
                         </TextBlock>
+                        <TextBlock Margin="0,0,0,4" TextWrapping="Wrap">
+                            <Run Text="• Unit conversion: 5 miles to km, 100°F to celsius" />
+                        </TextBlock>
+                        <TextBlock Margin="0,0,0,4" TextWrapping="Wrap">
+                            <Run Text="• Supported units: length, mass, temperature, volume, speed, area" />
+                        </TextBlock>
                         <TextBlock
                             Margin="0,0,0,4"
                             FontWeight="SemiBold"
-                            Text="Example:" />
+                            Text="Examples:" />
                         <TextBlock
                             Margin="0,0,0,4"
                             FontFamily="Consolas"
@@ -825,6 +842,15 @@
                             <Run Text="x + y" /><LineBreak />
                             <Run Text="sin(pi/2)" /><LineBreak />
                             <Run Text="sqrt(x * y)" />
+                        </TextBlock>
+                        <TextBlock
+                            Margin="0,4,0,4"
+                            FontFamily="Consolas"
+                            FontSize="12"
+                            TextWrapping="Wrap">
+                            <Run Text="5 miles to km" /><LineBreak />
+                            <Run Text="100 fahrenheit to celsius" /><LineBreak />
+                            <Run Text="3.5 gallons to liters" />
                         </TextBlock>
                         <TextBlock
                             Margin="0,8,0,4"

@@ -244,6 +244,9 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             }
         }
 
+        if (!CaptureLanguageUtilities.IsStaticImageCompatible(selectedLanguage))
+            selectedLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+
         if (options.OutputHeader)
         {
             PassedTextControl.AppendText(folderPath);
@@ -264,6 +267,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             {
                 PassedTextControl.AppendText(Environment.NewLine);
                 PassedTextControl.AppendText($"Using {selectedLanguage.DisplayName} from Windows.");
+                PassedTextControl.AppendText(Environment.NewLine);
+            }
+
+            if (options.GrabTemplate is GrabTemplate headerTemplate)
+            {
+                PassedTextControl.AppendText($"Using template: {headerTemplate.Name}");
                 PassedTextControl.AppendText(Environment.NewLine);
             }
 
@@ -371,7 +380,7 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
                 item.IsChecked = false;
         }
 
-        if (selectedILanguage is WindowsAiLang)
+        if (selectedILanguage is not GlobalLang)
         {
             SetCultureAndLanguageToDefault();
             return;
@@ -625,6 +634,7 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
     private void CaptureMenuItem_SubmenuOpened(object sender, RoutedEventArgs e)
     {
         LoadLanguageMenuItems(LanguageMenuItem);
+        LoadGrabTemplateMenuItems(GrabTemplateMenuItem);
     }
 
     private void CheckForGrabFrameOrLaunch()
@@ -913,6 +923,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         CheckForGrabFrameOrLaunch();
     }
 
+    private void ManageGrabTemplates_Click(object sender, RoutedEventArgs e)
+    {
+        PostGrabActionEditor editor = new();
+        editor.Show();
+    }
+
     private void HandlePreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         // Source: StackOverflow, read on Sep. 10, 2021
@@ -1154,17 +1170,25 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             return;
 
         selectedILanguage = ILang;
+        CaptureLanguageUtilities.PersistSelectedLanguage(selectedILanguage);
 
-        try
-        {
-            CultureInfo cultureInfo = new(selectedILanguage.LanguageTag);
-            selectedCultureInfo = cultureInfo;
-            XmlLanguage xmlLang = XmlLanguage.GetLanguage(cultureInfo.IetfLanguageTag);
-            Language = xmlLang;
-        }
-        catch (CultureNotFoundException)
+        if (selectedILanguage is not GlobalLang)
         {
             SetCultureAndLanguageToDefault();
+        }
+        else
+        {
+            try
+            {
+                CultureInfo cultureInfo = new(selectedILanguage.LanguageTag);
+                selectedCultureInfo = cultureInfo;
+                XmlLanguage xmlLang = XmlLanguage.GetLanguage(cultureInfo.IetfLanguageTag);
+                Language = xmlLang;
+            }
+            catch (CultureNotFoundException)
+            {
+                SetCultureAndLanguageToDefault();
+            }
         }
 
         foreach (object? child in BottomBarButtons.Children)
@@ -1175,6 +1199,50 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             menuItem.IsChecked = false;
 
         clickedMenuItem.IsChecked = true;
+    }
+
+    private void LoadGrabTemplateMenuItems(MenuItem grabTemplateMenuItem)
+    {
+        // Remember which template (if any) was previously selected
+        GrabTemplate? previouslySelected = grabTemplateMenuItem.Items
+            .OfType<MenuItem>()
+            .FirstOrDefault(m => m.IsChecked && m.Tag is GrabTemplate)
+            ?.Tag as GrabTemplate;
+
+        grabTemplateMenuItem.Items.Clear();
+
+        MenuItem noneItem = new()
+        {
+            Header = "(None)",
+            IsCheckable = true,
+            IsChecked = previouslySelected is null,
+        };
+        noneItem.Click += GrabTemplateMenuItem_Click;
+        grabTemplateMenuItem.Items.Add(noneItem);
+
+        foreach (GrabTemplate template in GrabTemplateManager.GetAllTemplates())
+        {
+            MenuItem templateMenuItem = new()
+            {
+                Header = template.Name,
+                IsCheckable = true,
+                IsChecked = previouslySelected?.Id == template.Id,
+                Tag = template,
+            };
+            templateMenuItem.Click += GrabTemplateMenuItem_Click;
+            grabTemplateMenuItem.Items.Add(templateMenuItem);
+        }
+    }
+
+    private void GrabTemplateMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem clickedItem)
+            return;
+
+        foreach (MenuItem item in GrabTemplateMenuItem.Items)
+            item.IsChecked = false;
+
+        clickedItem.IsChecked = true;
     }
 
     private void LaunchFindAndReplace()
@@ -1243,81 +1311,26 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         if (captureMenuItem.Items.Count > 0)
             return;
 
-        bool haveSetLastLang = false;
-        string lastTextLang = DefaultSettings.LastUsedLang;
         bool usingTesseract = DefaultSettings.UseTesseract && TesseractHelper.CanLocateTesseractExe();
+        List<ILanguage> availableLanguages = await CaptureLanguageUtilities.GetCaptureLanguagesAsync(usingTesseract);
+        availableLanguages = availableLanguages.Where(CaptureLanguageUtilities.IsStaticImageCompatible).ToList();
+        int selectedIndex = CaptureLanguageUtilities.FindPreferredLanguageIndex(
+            availableLanguages,
+            DefaultSettings.LastUsedLang,
+            LanguageUtilities.GetOCRLanguage());
 
-        if (WindowsAiUtilities.CanDeviceUseWinAI())
+        for (int i = 0; i < availableLanguages.Count; i++)
         {
-            WindowsAiLang windowsAiLang = new();
-
-            MenuItem languageMenuItem = new()
-            {
-                Header = windowsAiLang.DisplayName,
-                Tag = windowsAiLang,
-                IsCheckable = true,
-            };
-
-            languageMenuItem.Click += LanguageMenuItem_Click;
-            captureMenuItem.Items.Add(languageMenuItem);
-            if (!haveSetLastLang && windowsAiLang.CultureDisplayName == lastTextLang)
-            {
-                languageMenuItem.IsChecked = true;
-                haveSetLastLang = true;
-            }
-        }
-
-        if (usingTesseract)
-        {
-            List<ILanguage> tesseractLanguages = await TesseractHelper.TesseractLanguages();
-
-            foreach (TessLang language in tesseractLanguages.Cast<TessLang>())
-            {
-                MenuItem languageMenuItem = new()
-                {
-                    Header = language.DisplayName,
-                    Tag = language,
-                    IsCheckable = true,
-                };
-                languageMenuItem.Click += LanguageMenuItem_Click;
-
-                captureMenuItem.Items.Add(languageMenuItem);
-
-                if (!haveSetLastLang && language.CultureDisplayName == lastTextLang)
-                {
-                    languageMenuItem.IsChecked = true;
-                    haveSetLastLang = true;
-                }
-            }
-        }
-
-        IReadOnlyList<Language> possibleOCRLanguages = OcrEngine.AvailableRecognizerLanguages;
-
-        ILanguage firstLang = LanguageUtilities.GetOCRLanguage();
-
-        foreach (Language language in possibleOCRLanguages)
-        {
+            ILanguage language = availableLanguages[i];
             MenuItem languageMenuItem = new()
             {
                 Header = language.DisplayName,
-                Tag = new GlobalLang(language),
+                Tag = language,
                 IsCheckable = true,
+                IsChecked = i == selectedIndex,
             };
             languageMenuItem.Click += LanguageMenuItem_Click;
-
             captureMenuItem.Items.Add(languageMenuItem);
-
-            if (!haveSetLastLang &&
-                (language.AbbreviatedName.Equals(firstLang?.AbbreviatedName.ToLower(), StringComparison.CurrentCultureIgnoreCase)
-                || language.LanguageTag.Equals(firstLang?.LanguageTag.ToLower(), StringComparison.CurrentCultureIgnoreCase)))
-            {
-                languageMenuItem.IsChecked = true;
-                haveSetLastLang = true;
-            }
-        }
-        if (!haveSetLastLang && captureMenuItem.Items[0] is MenuItem firstMenuItem)
-        {
-            firstMenuItem.IsChecked = true;
         }
     }
 
@@ -1337,15 +1350,24 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         foreach (HistoryInfo history in grabsHistories)
         {
             MenuItem menuItem = new();
+            string historyId = history.ID;
             menuItem.Click += (sender, args) =>
             {
-                if (string.IsNullOrWhiteSpace(PassedTextControl.Text))
+                HistoryInfo? selectedHistory = Singleton<HistoryService>.Instance.GetTextHistoryById(historyId);
+
+                if (selectedHistory is null)
                 {
-                    PassedTextControl.Text = history.TextContent;
+                    menuItem.IsEnabled = false;
                     return;
                 }
 
-                EditTextWindow etw = new(history);
+                if (string.IsNullOrWhiteSpace(PassedTextControl.Text))
+                {
+                    PassedTextControl.Text = selectedHistory.TextContent;
+                    return;
+                }
+
+                EditTextWindow etw = new(selectedHistory);
                 etw.Show();
             };
 
@@ -1814,6 +1836,16 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
 
         string chosenFolderPath = folderBrowserDialog.SelectedPath;
 
+        GrabTemplate? selectedTemplate = null;
+        foreach (MenuItem item in GrabTemplateMenuItem.Items)
+        {
+            if (item.IsChecked && item.Tag is GrabTemplate grabTemplate)
+            {
+                selectedTemplate = grabTemplate;
+                break;
+            }
+        }
+
         OcrDirectoryOptions ocrDirectoryOptions = new()
         {
             Path = chosenFolderPath,
@@ -1821,7 +1853,8 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             WriteTxtFiles = ReadFolderOfImagesWriteTxtFiles.IsChecked is true,
             OutputFileNames = OutputFilenamesCheck.IsChecked is true,
             OutputFooter = OutputFooterCheck.IsChecked is true,
-            OutputHeader = OutputHeaderCheck.IsChecked is true
+            OutputHeader = OutputHeaderCheck.IsChecked is true,
+            GrabTemplate = selectedTemplate,
         };
 
         if (Directory.Exists(chosenFolderPath))
@@ -2195,13 +2228,18 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             e.CanExecute = true;
     }
 
-    private void SplitOnSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
+    private async void SplitOnSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
     {
         string selectedText = PassedTextControl.SelectedText;
 
         if (string.IsNullOrEmpty(selectedText))
         {
-            System.Windows.MessageBox.Show("No text selected", "Did not split lines");
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Did not split lines",
+                Content = "No text selected",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -2212,13 +2250,18 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         PassedTextControl.Text = textToManipulate.ToString();
     }
 
-    private void SplitAfterSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
+    private async void SplitAfterSelectionCmdExecuted(object sender, ExecutedRoutedEventArgs e)
     {
         string selectedText = PassedTextControl.SelectedText;
 
         if (string.IsNullOrEmpty(selectedText))
         {
-            System.Windows.MessageBox.Show("No text selected", "Did not split lines");
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Did not split lines",
+                Content = "No text selected",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -3379,8 +3422,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show($"Translation failed: {ex.Message}",
-                "Translation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Translation Error",
+                Content = $"Translation failed: {ex.Message}",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
         }
         finally
         {
@@ -3394,8 +3441,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
 
         if (string.IsNullOrWhiteSpace(textDescription))
         {
-            System.Windows.MessageBox.Show("Please enter or select text to extract a regex pattern from.",
-                "No Text", MessageBoxButton.OK, MessageBoxImage.Information);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "No Text",
+                Content = "Please enter or select text to extract a regex pattern from.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -3409,8 +3460,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
         catch (Exception ex)
         {
             Debug.WriteLine($"Regex extraction exception: {ex.Message}");
-            System.Windows.MessageBox.Show($"An error occurred while extracting regex: {ex.Message}",
-                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Error",
+                Content = $"An error occurred while extracting regex: {ex.Message}",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             SetToLoaded();
             return;
         }
@@ -3419,8 +3474,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
 
         if (string.IsNullOrWhiteSpace(regexPattern))
         {
-            System.Windows.MessageBox.Show("Failed to extract a regex pattern. The AI service may not be available or could not generate a pattern.",
-                "Extraction Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Extraction Failed",
+                Content = "Failed to extract a regex pattern. The AI service may not be available or could not generate a pattern.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
             return;
         }
 
@@ -3461,8 +3520,12 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             catch (Exception ex)
             {
                 Debug.WriteLine($"Failed to copy regex to clipboard: {ex.Message}");
-                System.Windows.MessageBox.Show("Failed to copy regex pattern to clipboard.",
-                    "Copy Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                await new Wpf.Ui.Controls.MessageBox
+                {
+                    Title = "Copy Failed",
+                    Content = "Failed to copy regex pattern to clipboard.",
+                    CloseButtonText = "OK"
+                }.ShowDialogAsync();
             }
         }
     }
@@ -3782,26 +3845,7 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
     private List<StoredRegex> LoadRegexPatterns()
     {
         List<StoredRegex> returnRegexes = [];
-
-        // Load from settings
-        string regexListJson = DefaultSettings.RegexList;
-
-        if (!string.IsNullOrWhiteSpace(regexListJson))
-        {
-            try
-            {
-                StoredRegex[]? loadedPatterns = JsonSerializer.Deserialize<StoredRegex[]>(regexListJson);
-                if (loadedPatterns is not null)
-                {
-                    foreach (StoredRegex pattern in loadedPatterns)
-                        returnRegexes.Add(pattern);
-                }
-            }
-            catch (JsonException)
-            {
-                // If deserialization fails, start fresh
-            }
-        }
+        returnRegexes.AddRange(AppUtilities.TextGrabSettingsService.LoadStoredRegexes());
 
         // Add default patterns if list is empty
         if (returnRegexes.Count == 0)

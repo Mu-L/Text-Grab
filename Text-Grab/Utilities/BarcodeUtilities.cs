@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
+using System.Runtime.InteropServices;
 using Text_Grab.Models;
 using ZXing;
 using ZXing.Common;
@@ -11,34 +16,86 @@ namespace Text_Grab.Utilities;
 
 public static class BarcodeUtilities
 {
-
-    public static OcrOutput TryToReadBarcodes(Bitmap bitmap)
+    public static List<OcrOutput> TryToReadBarcodes(Bitmap bitmap)
     {
+        if (!CanReadBitmapDimensions(bitmap))
+            return [];
+
         BarcodeReader barcodeReader = new()
         {
             AutoRotate = true,
-            Options = new ZXing.Common.DecodingOptions { TryHarder = true }
+            Options = new DecodingOptions { TryHarder = true }
         };
 
-        ZXing.Result result = barcodeReader.Decode(bitmap);
+        Result[]? results = null;
 
-        string resultString = string.Empty;
-        if (result is not null)
-            resultString = result.Text;
-
-        return new OcrOutput()
+        try
         {
-            Kind = OcrOutputKind.Barcode,
-            RawOutput = resultString,
-            SourceBitmap = bitmap,
-        };
+            results = barcodeReader.DecodeMultiple(bitmap);
+        }
+        catch (ArgumentException ex)
+        {
+            Debug.WriteLine($"Unable to decode barcode from bitmap: {ex.Message}");
+            return [];
+        }
+        catch (ObjectDisposedException ex)
+        {
+            Debug.WriteLine($"Unable to decode barcode from disposed bitmap: {ex.Message}");
+            return [];
+        }
+        catch (ExternalException ex)
+        {
+            Debug.WriteLine($"Unable to decode barcode from GDI+ bitmap: {ex.Message}");
+            return [];
+        }
+
+        if (results is null)
+            return [];
+
+        return results
+            .Where(r => r?.Text is not null)
+            .Select(r => new OcrOutput()
+            {
+                Kind = OcrOutputKind.Barcode,
+                RawOutput = r.Text,
+                SourceBitmap = bitmap,
+            })
+            .ToList();
+    }
+
+    private static bool CanReadBitmapDimensions(Bitmap? bitmap)
+    {
+        if (bitmap is null)
+            return false;
+
+        try
+        {
+            return bitmap.Width > 0 && bitmap.Height > 0;
+        }
+        catch (ArgumentException ex)
+        {
+            Debug.WriteLine($"Unable to read bitmap dimensions for barcode scanning: {ex.Message}");
+            return false;
+        }
+        catch (ObjectDisposedException ex)
+        {
+            Debug.WriteLine($"Unable to read bitmap dimensions for disposed barcode bitmap: {ex.Message}");
+            return false;
+        }
+        catch (ExternalException ex)
+        {
+            Debug.WriteLine($"Unable to read barcode bitmap dimensions due to GDI+ error: {ex.Message}");
+            return false;
+        }
     }
 
     public static Bitmap GetQrCodeForText(string text, ErrorCorrectionLevel correctionLevel)
     {
-        BitmapRenderer bitmapRenderer = new();
-        bitmapRenderer.Foreground = System.Drawing.Color.Black;
-        bitmapRenderer.Background = System.Drawing.Color.White;
+        BitmapRenderer bitmapRenderer = new()
+        {
+            Foreground = System.Drawing.Color.Black,
+            Background = System.Drawing.Color.White
+        };
 
         BarcodeWriter barcodeWriter = new()
         {

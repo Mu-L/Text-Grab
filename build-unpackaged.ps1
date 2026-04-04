@@ -52,6 +52,7 @@ dotnet publish "$PSScriptRoot\$Project\$Project.csproj" `
     -v minimal `
     -o $BuildPathX64SC `
     -p:EnableMsixTooling=true `
+    -p:WindowsAppSDKSelfContained=true `
     -p:PublishReadyToRun=true `
     -p:PublishSingleFile=true `
     -p:CopyOutputSymbolsToPublishDirectory=false `
@@ -82,6 +83,7 @@ dotnet publish "$PSScriptRoot\$Project\$Project.csproj" `
     -o $BuildPathArm64SC `
     -p:PublishSingleFile=true `
     -p:EnableMsixTooling=true `
+    -p:WindowsAppSDKSelfContained=true `
     -p:CopyOutputSymbolsToPublishDirectory=false `
     --nologo
 

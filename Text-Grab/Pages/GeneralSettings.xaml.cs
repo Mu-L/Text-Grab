@@ -140,6 +140,20 @@ public partial class GeneralSettings : Page
         InsertDelaySeconds = DefaultSettings.InsertDelay;
         SecondsTextBox.Text = InsertDelaySeconds.ToString("##.#", System.Globalization.CultureInfo.InvariantCulture);
 
+        // Context menu integration - only available for unpackaged apps
+        if (!AppUtilities.IsPackaged())
+        {
+            AddToContextMenuCheckBox.IsChecked = ContextMenuUtilities.IsRegisteredInContextMenu();
+            RegisterOpenWithCheckBox.IsChecked = DefaultSettings.RegisterOpenWith;
+        }
+        else
+        {
+            AddToContextMenuCheckBox.IsEnabled = false;
+            AddToContextMenuCheckBox.IsChecked = false;
+            RegisterOpenWithCheckBox.IsEnabled = false;
+            RegisterOpenWithCheckBox.IsChecked = false;
+        }
+
         settingsSet = true;
     }
 
@@ -377,5 +391,81 @@ public partial class GeneralSettings : Page
             return;
 
         Singleton<WebSearchUrlModel>.Instance.DefaultSearcher = newDefault;
+    }
+
+    private async void AddToContextMenuCheckBox_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!settingsSet)
+            return;
+
+        bool success = ContextMenuUtilities.AddToContextMenu(out string? errorMessage);
+        if (success)
+        {
+            DefaultSettings.AddToContextMenu = true;
+            DefaultSettings.Save();
+        }
+        else
+        {
+            // Revert the checkbox if registration failed
+            settingsSet = false;
+            AddToContextMenuCheckBox.IsChecked = false;
+            settingsSet = true;
+
+            // Show error message to user
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Context Menu Registration Failed",
+                Content = errorMessage ?? "Failed to add Text Grab to the context menu.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
+        }
+    }
+
+    private async void AddToContextMenuCheckBox_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (!settingsSet)
+            return;
+
+        bool success = ContextMenuUtilities.RemoveFromContextMenu(out string? errorMessage);
+
+        if (success)
+        {
+            DefaultSettings.AddToContextMenu = false;
+            DefaultSettings.Save();
+        }
+        else
+        {
+            // Revert the checkbox since removal failed - the context menu is still registered
+            settingsSet = false;
+            AddToContextMenuCheckBox.IsChecked = true;
+            settingsSet = true;
+
+            await new Wpf.Ui.Controls.MessageBox
+            {
+                Title = "Context Menu Removal Failed",
+                Content = errorMessage ?? "Some context menu entries could not be removed.",
+                CloseButtonText = "OK"
+            }.ShowDialogAsync();
+        }
+    }
+
+    private void RegisterOpenWithCheckBox_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!settingsSet)
+            return;
+
+        ImplementAppOptions.RegisterAsImageOpenWithApp();
+        DefaultSettings.RegisterOpenWith = true;
+        DefaultSettings.Save();
+    }
+
+    private void RegisterOpenWithCheckBox_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (!settingsSet)
+            return;
+
+        ImplementAppOptions.UnregisterAsImageOpenWithApp();
+        DefaultSettings.RegisterOpenWith = false;
+        DefaultSettings.Save();
     }
 }

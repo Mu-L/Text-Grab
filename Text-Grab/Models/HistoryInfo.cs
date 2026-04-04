@@ -35,9 +35,14 @@ public class HistoryInfo : IEquatable<HistoryInfo>
 
     public double DpiScaleFactor { get; set; } = 1.0;
 
+    public FsgSelectionStyle SelectionStyle { get; set; } = FsgSelectionStyle.Region;
+
     public string LanguageTag { get; set; } = string.Empty;
 
     public LanguageKind LanguageKind { get; set; } = LanguageKind.Global;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsedUiAutomation { get; set; }
 
     public bool HasCalcPaneOpen { get; set; } = false;
 
@@ -48,14 +53,18 @@ public class HistoryInfo : IEquatable<HistoryInfo>
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(LanguageTag))
+            (string normalizedLanguageTag, LanguageKind normalizedLanguageKind, _) =
+                LanguageUtilities.NormalizePersistedLanguageIdentity(LanguageKind, LanguageTag, UsedUiAutomation);
+
+            if (string.IsNullOrWhiteSpace(normalizedLanguageTag))
                 return new GlobalLang(LanguageUtilities.GetCurrentInputLanguage().AsLanguage() ?? new Language("en-US"));
 
-            return LanguageKind switch
+            return normalizedLanguageKind switch
             {
-                LanguageKind.Global => new GlobalLang(new Language(LanguageTag)),
-                LanguageKind.Tesseract => new TessLang(LanguageTag),
+                LanguageKind.Global => new GlobalLang(new Language(normalizedLanguageTag)),
+                LanguageKind.Tesseract => new TessLang(normalizedLanguageTag),
                 LanguageKind.WindowsAi => new WindowsAiLang(),
+                LanguageKind.UiAutomation => CaptureLanguageUtilities.GetUiAutomationFallbackLanguage(),
                 _ => new GlobalLang(LanguageUtilities.GetCurrentInputLanguage().AsLanguage() ?? new Language("en-US")),
             };
         }
@@ -82,13 +91,32 @@ public class HistoryInfo : IEquatable<HistoryInfo>
 
     public string TextContent { get; set; } = string.Empty;
 
-    public string WordBorderInfoJson { get; set; } = string.Empty;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WordBorderInfoJson { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WordBorderInfoFileName { get; set; }
 
     public string RectAsString { get; set; } = string.Empty;
 
     #endregion Properties
 
     #region Public Methods
+
+    public void ClearTransientImage()
+    {
+        // Do not Dispose() here — the bitmap may still be in use by a
+        // fire-and-forget SaveImageFile task (the packaged path is async).
+        // Nulling the reference lets the GC collect once all consumers finish.
+        // The HistoryService.DisposeCachedBitmap() path handles deterministic
+        // cleanup of the captured fullscreen bitmap via its GDI handle.
+        ImageContent = null;
+    }
+
+    public void ClearTransientWordBorderData()
+    {
+        WordBorderInfoJson = null;
+    }
 
     public static bool operator !=(HistoryInfo? left, HistoryInfo? right)
     {

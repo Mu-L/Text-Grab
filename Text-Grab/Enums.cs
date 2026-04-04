@@ -83,6 +83,7 @@ public enum ScrollBehavior
     None = 0,
     Resize = 1,
     Zoom = 2,
+    ZoomWhenFrozen = 3,
 }
 
 public enum LanguageKind
@@ -90,6 +91,14 @@ public enum LanguageKind
     Global = 0,
     Tesseract = 1,
     WindowsAi = 2,
+    UiAutomation = 3,
+}
+
+public enum UiAutomationTraversalMode
+{
+    Fast = 0,
+    Balanced = 1,
+    Thorough = 2,
 }
 
 public enum FsgDefaultMode
@@ -97,4 +106,12 @@ public enum FsgDefaultMode
     Default = 0,
     SingleLine = 1,
     Table = 2,
+}
+
+public enum FsgSelectionStyle
+{
+    Region = 0,
+    Window = 1,
+    Freeform = 2,
+    AdjustAfter = 3,
 }

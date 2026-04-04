@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
 using Text_Grab.Interfaces;
@@ -30,6 +31,8 @@ public class LanguageService
     // Static instance of WindowsAiLang to avoid allocations
     private static readonly WindowsAiLang _windowsAiLangInstance = new();
     private static readonly string _windowsAiLangTag = _windowsAiLangInstance.LanguageTag;
+    private static readonly UiAutomationLang _uiAutomationLangInstance = new();
+    private static readonly string _uiAutomationLangTag = _uiAutomationLangInstance.LanguageTag;
 
     #endregion Fields
 
@@ -40,7 +43,7 @@ public class LanguageService
     /// </summary>
     public ILanguage GetCurrentInputLanguage()
     {
-        string currentInputLangTag = InputLanguageManager.Current.CurrentInputLanguage.Name;
+        string currentInputLangTag = GetCurrentInputLanguageTag();
 
         lock (_cacheLock)
         {
@@ -71,6 +74,9 @@ public class LanguageService
 
             List<ILanguage> languages = [];
 
+            if (AppUtilities.TextGrabSettings.UiAutomationEnabled)
+                languages.Add(_uiAutomationLangInstance);
+
             if (WindowsAiUtilities.CanDeviceUseWinAI())
             {
                 // Add Windows AI languages - use static instance
@@ -97,6 +103,7 @@ public class LanguageService
         {
             Language lang => lang.LanguageTag,
             WindowsAiLang => _windowsAiLangTag,
+            UiAutomationLang => _uiAutomationLangTag,
             TessLang tessLang => tessLang.RawTag,
             GlobalLang gLang => gLang.LanguageTag,
             _ => throw new ArgumentException("Unsupported language type", nameof(language)),
@@ -112,9 +119,36 @@ public class LanguageService
         {
             Language => LanguageKind.Global,
             WindowsAiLang => LanguageKind.WindowsAi,
+            UiAutomationLang => LanguageKind.UiAutomation,
             TessLang => LanguageKind.Tesseract,
             _ => LanguageKind.Global, // Default fallback
         };
+    }
+
+    public static (string LanguageTag, LanguageKind LanguageKind, bool UsedUiAutomation) GetPersistedLanguageIdentity(object language)
+    {
+        if (language is UiAutomationLang)
+        {
+            ILanguage fallbackLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+            return (fallbackLanguage.LanguageTag, LanguageKind.Global, true);
+        }
+
+        return (GetLanguageTag(language), GetLanguageKind(language), false);
+    }
+
+    public static (string LanguageTag, LanguageKind LanguageKind, bool UsedUiAutomation) NormalizePersistedLanguageIdentity(
+        LanguageKind languageKind,
+        string languageTag,
+        bool usedUiAutomation = false)
+    {
+        if (languageKind == LanguageKind.UiAutomation
+            || string.Equals(languageTag, _uiAutomationLangTag, StringComparison.OrdinalIgnoreCase))
+        {
+            ILanguage fallbackLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+            return (fallbackLanguage.LanguageTag, LanguageKind.Global, true);
+        }
+
+        return (languageTag, languageKind, usedUiAutomation);
     }
 
     /// <summary>
@@ -145,15 +179,28 @@ public class LanguageService
                     return _cachedOcrLanguage;
                 }
 
-                try
+                if (lastUsedLang == _uiAutomationLangTag && AppUtilities.TextGrabSettings.UiAutomationEnabled)
                 {
-                    selectedLanguage = new GlobalLang(lastUsedLang);
+                    _cachedOcrLanguage = _uiAutomationLangInstance;
+                    return _cachedOcrLanguage;
                 }
-                catch (Exception ex)
+
+                if (lastUsedLang == _uiAutomationLangTag)
                 {
-                    Debug.WriteLine($"Failed to parse LastUsedLang: {lastUsedLang}\n{ex.Message}");
-                    // if the language tag is invalid, reset to current input language
-                    selectedLanguage = GetCurrentInputLanguage();
+                    selectedLanguage = CaptureLanguageUtilities.GetUiAutomationFallbackLanguage();
+                }
+                else
+                {
+                    try
+                    {
+                        selectedLanguage = new GlobalLang(lastUsedLang);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to parse LastUsedLang: {lastUsedLang}\n{ex.Message}");
+                        // if the language tag is invalid, reset to current input language
+                        selectedLanguage = GetCurrentInputLanguage();
+                    }
                 }
             }
 
@@ -206,7 +253,7 @@ public class LanguageService
     /// </summary>
     public string GetSystemLanguageForTranslation()
     {
-        string currentInputLangTag = InputLanguageManager.Current.CurrentInputLanguage.Name;
+        string currentInputLangTag = GetCurrentInputLanguageTag();
 
         lock (_cacheLock)
         {
@@ -297,4 +344,26 @@ public class LanguageService
     }
 
     #endregion Public Methods
+
+    private static string GetCurrentInputLanguageTag()
+    {
+        string? currentInputLangTag = null;
+        try
+        {
+            currentInputLangTag = InputLanguageManager.Current?.CurrentInputLanguage?.Name;
+        }
+        catch (NullReferenceException)
+        {
+            currentInputLangTag = null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentInputLangTag))
+            return currentInputLangTag;
+
+        currentInputLangTag = CultureInfo.CurrentUICulture.Name;
+        if (!string.IsNullOrWhiteSpace(currentInputLangTag))
+            return currentInputLangTag;
+
+        return "en-US";
+    }
 }

@@ -128,13 +128,6 @@ public class ButtonInfo
         },
         new()
         {
-            ButtonText = "Save to File...",
-            SymbolText = "",
-            ClickEvent = "SaveBTN_Click",
-            SymbolIcon = SymbolRegular.Save24
-        },
-        new()
-        {
             ButtonText = "Make Single Line",
             SymbolText = "",
             Command = "SingleLineCmd",

@@ -12,7 +12,13 @@
       "Bash(dotnet test:*)",
       "Bash(gh pr list:*)",
       "Bash(/mnt/c/Program Files/dotnet/dotnet.exe:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Skill(pdm)",
+      "Bash(mkdir -p bin)",
+      "Bash(curl -o bin/pdm https://app.produckmap.com/cli/pdm)",
+      "Bash(chmod +x bin/pdm)",
+      "Bash(bin/pdm ui-element:*)",
+      "Bash(bin/pdm *)"
     ],
     "deny": []
   }

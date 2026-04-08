@@ -79,6 +79,11 @@
                 KeySetChanged="ShortcutControl_KeySetChanged"
                 RecordingStarted="ShortcutControl_Recording"
                 ShortcutName="Quick Simple Lookup" />
+            <controls:ShortcutControl
+                x:Name="OccShortcutControl"
+                KeySetChanged="ShortcutControl_KeySetChanged"
+                RecordingStarted="ShortcutControl_Recording"
+                ShortcutName="Open Clipboard Content" />
         </StackPanel>
     </StackPanel>
 </Page>

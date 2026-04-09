@@ -64,10 +64,27 @@ internal class SettingsService : IDisposable
         _localSettings = localSettings;
         _managedJsonSettingsFolderPath = managedJsonSettingsFolderPath ?? GetManagedJsonSettingsFolderPath();
         _saveClassicSettingsChanges = saveClassicSettingsChanges;
-        _preferFileBackedManagedSettings = ClassicSettings.EnableFileBackedManagedSettings;
 
-        if (ClassicSettings.FirstRun && _localSettings is not null && _localSettings.Values.Count > 0)
-            MigrateLocalSettingsToClassic();
+        if (ClassicSettings.FirstRun)
+        {
+            if (_localSettings is not null && _localSettings.Values.Count > 0)
+            {
+                // Packaged: ApplicationDataContainer persists across package upgrades,
+                // so copy saved values back into the freshly-reset classic settings.
+                MigrateLocalSettingsToClassic();
+                if (_saveClassicSettingsChanges)
+                    ClassicSettings.Save();
+            }
+            else if (_localSettings is null && _saveClassicSettingsChanges)
+            {
+                // Unpackaged: Properties.Settings stores data in a version-specific path,
+                // so call Upgrade() to carry forward values from the previous version.
+                ClassicSettings.Upgrade();
+            }
+        }
+
+        // Must be read after any migration so the user's saved preference is respected.
+        _preferFileBackedManagedSettings = ClassicSettings.EnableFileBackedManagedSettings;
 
         // copy settings from classic to local settings
         // so that when app updates they can be copied forward

@@ -169,6 +169,7 @@ public partial class EditTextWindow : Wpf.Ui.Controls.FluentWindow
             {nameof(DeleteAllSelectionCmd), DeleteAllSelectionCmd},
             {nameof(DeleteAllSelectionPatternCmd), DeleteAllSelectionPatternCmd},
             {nameof(InsertSelectionOnEveryLineCmd), InsertSelectionOnEveryLineCmd},
+            {nameof(SplitAfterSelectionCmd), SplitAfterSelectionCmd},
             {nameof(OcrPasteCommand), OcrPasteCommand},
             {nameof(MakeQrCodeCmd), MakeQrCodeCmd},
             {nameof(WebSearchCmd), WebSearchCmd},

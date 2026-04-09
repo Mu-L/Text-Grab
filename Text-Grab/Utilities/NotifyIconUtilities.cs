@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Media.Imaging;
 using Text_Grab.Controls;
 using Text_Grab.Models;
 using Text_Grab.Services;
@@ -137,6 +140,63 @@ public static class NotifyIconUtilities
                 System.Windows.Application.Current.Dispatcher.Invoke(new Action(() =>
                 {
                     Singleton<HistoryService>.Instance.GetLastHistoryAsGrabFrame();
+                }));
+                break;
+            case ShortcutKeyActions.OpenClipboardContent:
+                System.Windows.Application.Current.Dispatcher.Invoke(new Action(() =>
+                {
+                    if (System.Windows.Clipboard.ContainsText())
+                    {
+                        string text = System.Windows.Clipboard.GetText();
+                        EditTextWindow etw = new(text, false);
+                        etw.Show();
+                        etw.Activate();
+                        return;
+                    }
+
+                    if (System.Windows.Clipboard.ContainsFileDropList())
+                    {
+                        StringCollection files = System.Windows.Clipboard.GetFileDropList();
+                        string? imagePath = files.Cast<string?>().FirstOrDefault(f => f is not null && IoUtilities.IsImageFile(f!));
+                        if (imagePath is not null)
+                        {
+                            GrabFrame gf = new(imagePath);
+                            gf.Show();
+                            gf.Activate();
+                            return;
+                        }
+                    }
+
+                    (bool success, System.Windows.Media.ImageSource? clipboardImage) = ClipboardUtilities.TryGetImageFromClipboard();
+                    if (!success || clipboardImage is null)
+                        return;
+
+                    BitmapSource? bitmapSource = null;
+                    if (clipboardImage is System.Windows.Interop.InteropBitmap interopBitmap)
+                    {
+                        System.Drawing.Bitmap bmp = ImageMethods.InteropBitmapToBitmap(interopBitmap);
+                        bitmapSource = ImageMethods.BitmapToImageSource(bmp);
+                        bmp.Dispose();
+                    }
+                    else if (clipboardImage is BitmapSource source)
+                    {
+                        bitmapSource = source;
+                    }
+
+                    if (bitmapSource is null)
+                        return;
+
+                    string tempPath = Path.Combine(Path.GetTempPath(), $"TextGrab_Clipboard_{Guid.NewGuid()}.png");
+                    using (FileStream fileStream = new(tempPath, FileMode.Create))
+                    {
+                        PngBitmapEncoder encoder = new();
+                        encoder.Frames.Add(BitmapFrame.Create(bitmapSource));
+                        encoder.Save(fileStream);
+                    }
+
+                    GrabFrame grabFrame = new(tempPath);
+                    grabFrame.Show();
+                    grabFrame.Activate();
                 }));
                 break;
             default:

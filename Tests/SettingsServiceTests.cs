@@ -133,6 +133,77 @@ public class SettingsServiceTests : IDisposable
         Assert.Empty(service.LoadStoredRegexes());
     }
 
+    [Fact]
+    public void Constructor_FileBackedModeReflectsSettingsValueSetBeforeConstruction()
+    {
+        // EnableFileBackedManagedSettings must be read AFTER any migration so the
+        // persisted user preference is honoured for the current session.
+        Settings settings = new()
+        {
+            FirstRun = false,
+            EnableFileBackedManagedSettings = true
+        };
+
+        SettingsService service = CreateService(settings);
+
+        Assert.True(service.IsFileBackedManagedSettingsEnabled);
+    }
+
+    [Fact]
+    public void Constructor_FileBackedModeDefaultsToFalseWhenNotSet()
+    {
+        Settings settings = new()
+        {
+            FirstRun = false,
+            EnableFileBackedManagedSettings = false
+        };
+
+        SettingsService service = CreateService(settings);
+
+        Assert.False(service.IsFileBackedManagedSettingsEnabled);
+    }
+
+    [Fact]
+    public void Constructor_UnpackagedUpgradePathDoesNotThrowWhenNoPreviousVersion()
+    {
+        // When saveClassicSettingsChanges is false (test mode) the Upgrade() code path is
+        // skipped, so this simply verifies that the constructor completes successfully when
+        // FirstRun is true and localSettings is null.
+        Settings settings = new()
+        {
+            FirstRun = true,
+            EnableFileBackedManagedSettings = false
+        };
+
+        SettingsService service = CreateService(settings);
+
+        // Service initialises without throwing; FileBackedMode reflects the setting.
+        Assert.False(service.IsFileBackedManagedSettingsEnabled);
+    }
+
+    [Fact]
+    public void LoadStoredRegexes_SidecarSurvivesSimulatedPackageUpgrade()
+    {
+        // Simulate a package upgrade: sidecar file already exists (from the previous
+        // version) but ClassicSettings.RegexList is empty (reset by the upgrade).
+        // The service must load from the sidecar and backfill ClassicSettings.
+        Settings settings = new()
+        {
+            FirstRun = false,
+            EnableFileBackedManagedSettings = false,
+            RegexList = string.Empty
+        };
+        string regexFilePath = Path.Combine(_tempFolder, "RegexList.json");
+        File.WriteAllText(regexFilePath, SerializeRegexes("survived-upgrade"));
+
+        SettingsService service = CreateService(settings);
+
+        StoredRegex loaded = Assert.Single(service.LoadStoredRegexes());
+        Assert.Equal("survived-upgrade", loaded.Id);
+        // Verify backfill into ClassicSettings so the next migration has something to copy.
+        Assert.Contains("survived-upgrade", settings.RegexList);
+    }
+
     private SettingsService CreateService(Settings settings) =>
         new(
             settings,

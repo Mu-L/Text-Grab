@@ -128,13 +128,6 @@ public class ButtonInfo
         },
         new()
         {
-            ButtonText = "Save to File...",
-            SymbolText = "",
-            ClickEvent = "SaveBTN_Click",
-            SymbolIcon = SymbolRegular.Save24
-        },
-        new()
-        {
             ButtonText = "Make Single Line",
             SymbolText = "",
             Command = "SingleLineCmd",
@@ -216,6 +209,14 @@ public class ButtonInfo
         },
         new()
         {
+            OrderNumber = 1.21,
+            ButtonText = "Save As...",
+            SymbolText = "",
+            ClickEvent = "SaveAsBTN_Click",
+            SymbolIcon = SymbolRegular.DocumentEdit24
+        },
+        new()
+        {
             OrderNumber = 1.3,
             ButtonText = "Make Single Line",
             SymbolText = "",
@@ -237,6 +238,14 @@ public class ButtonInfo
             SymbolText = "",
             ClickEvent = "FSGDelayMenuItem_Click",
             SymbolIcon = SymbolRegular.Timer324
+        },
+        new()
+        {
+            OrderNumber = 1.42,
+            ButtonText = "Manage Grab Templates...",
+            SymbolText = "",
+            ClickEvent = "ManageGrabTemplates_Click",
+            SymbolIcon = SymbolRegular.GridDots24
         },
         new()
         {
@@ -413,6 +422,14 @@ public class ButtonInfo
             SymbolText = "",
             Command = "SplitOnSelectionCmd",
             SymbolIcon = SymbolRegular.TextWrap24
+        },
+        new()
+        {
+            OrderNumber = 4.51,
+            ButtonText = "Split Lines After Each Selection",
+            SymbolText = "",
+            Command = "SplitAfterSelectionCmd",
+            SymbolIcon = SymbolRegular.TextWrapOff24
         },
         new()
         {

@@ -136,6 +136,9 @@ public partial class KeysSettings : Page
                 case ShortcutKeyActions.PreviousGrabFrame:
                     LgfShortcutControl.KeySet = keySet;
                     break;
+                case ShortcutKeyActions.OpenClipboardContent:
+                    OccShortcutControl.KeySet = keySet;
+                    break;
                 default:
                     break;
             }

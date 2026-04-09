@@ -332,6 +332,10 @@ public static class UIAutomationUtilities
 
             return string.Join(Environment.NewLine, extractedText);
         }
+        catch (AccessViolationException)
+        {
+            return string.Empty;
+        }
         catch (ElementNotAvailableException)
         {
             return string.Empty;
@@ -833,6 +837,10 @@ public static class UIAutomationUtilities
                 return !string.IsNullOrWhiteSpace(text);
             }
         }
+        catch (AccessViolationException)
+        {
+            // Native UIA AV — treat as unavailable
+        }
         catch (ElementNotAvailableException)
         {
         }
@@ -861,11 +869,23 @@ public static class UIAutomationUtilities
                 if (!RangeIntersectsBounds(range, filterBounds))
                     continue;
 
-                TryAddUniqueText(range.GetText(-1), seenText, extractedText);
+                try
+                {
+                    TryAddUniqueText(range.GetText(-1), seenText, extractedText);
+                }
+                catch (AccessViolationException)
+                {
+                    // Native UIAutomation can AV when a range handle becomes stale,
+                    // especially in self-contained builds. Skip the range and continue.
+                }
             }
 
             text = string.Join(Environment.NewLine, extractedText);
             return !string.IsNullOrWhiteSpace(text);
+        }
+        catch (AccessViolationException)
+        {
+            // Native UIA AV — treat as unavailable
         }
         catch (ElementNotAvailableException)
         {
